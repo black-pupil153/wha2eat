@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/components/AppProvider';
-import { storage } from '@/lib/storage';
 import { BUDGET_LABEL } from '@/lib/constants';
-import type { Dish, CookRecord, Rating } from '@/lib/types';
+import { getSolarWindow, isInSeason } from '@/lib/solar';
+import type { Dish, CookRecord, Rating, WeekPlan } from '@/lib/types';
 
 const RATING_LABEL: Record<Rating, string> = {
   1: '😖 踩雷',
@@ -14,26 +14,30 @@ const RATING_LABEL: Record<Rating, string> = {
   3: '😋 满意',
 };
 
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function DishDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { ready, weekPlan, preferences } = useApp();
+  const {
+    ready,
+    weekPlan,
+    preferences,
+    setWeekPlan,
+    upsertDish,
+    cookRecords,
+    dishLibrary,
+  } = useApp();
 
-  // 菜谱库回退 + 历史笔记
-  const [libraryDish, setLibraryDish] = useState<Dish | null>(null);
-  const [cookRecords, setCookRecords] = useState<CookRecord[]>([]);
-
-  useEffect(() => {
-    // 加载历史烹饪记录
-    setCookRecords(storage.getCookRecords());
-
-    // 菜谱库回退：WeekPlan.dishes 找不到时查 dishLibrary
-    if (weekPlan && params.id && !weekPlan.dishes[params.id]) {
-      const lib = storage.getDishLibrary();
-      const found = lib.find((d) => d.id === params.id) ?? null;
-      setLibraryDish(found);
-    }
-  }, [weekPlan, params.id]);
+  const [error, setError] = useState<string | null>(null);
+  const [revising, setRevising] = useState(false);
+  const [revisedOverride, setRevisedOverride] = useState<{
+    id: string;
+    dish: Dish;
+  } | null>(null);
 
   if (!ready) {
     return (
@@ -44,14 +48,61 @@ export default function DishDetailPage() {
   }
 
   const id = params.id;
-  // 优先从当周 WeekPlan.dishes 取，找不到则回退菜谱库
+  const planDish =
+    id && weekPlan ? (weekPlan.dishes[id] ?? null) : null;
+  const libraryDish =
+    id && !planDish
+      ? (dishLibrary.find((d) => d.id === id) ?? null)
+      : null;
   const dish: Dish | null =
-    (id && weekPlan ? weekPlan.dishes[id] : null) ?? libraryDish;
+    (revisedOverride?.id === id ? revisedOverride.dish : null) ??
+    planDish ??
+    libraryDish;
 
-  // 该菜的历史笔记（notes 不为空，按时间倒序）
+  const dayKind = weekPlan?.days.find((d) => d.dishId === id)?.kind;
   const historyNotes = cookRecords
     .filter((r) => r.dishId === id && r.notes && r.notes.trim())
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const lastNote = historyNotes[0]?.notes;
+  const solarWindow = getSolarWindow(localToday());
+
+  const handleRevise = async () => {
+    if (!dish) return;
+    const notes = historyNotes
+      .map((r) => r.notes)
+      .filter((n): n is string => !!n && !!n.trim());
+    if (notes.length === 0) {
+      setError('还没有改进要点，先在菜单页「做过了」里记一条吧');
+      return;
+    }
+    setRevising(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/dish/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dish, notes }),
+      });
+      const data = (await res.json()) as { dish?: Dish; error?: string };
+      if (!res.ok || !data.dish) {
+        throw new Error(data.error || '重新生成失败，请稍后重试');
+      }
+      const revised = data.dish;
+      upsertDish(revised);
+      setRevisedOverride({ id: revised.id, dish: revised });
+      if (weekPlan?.dishes[revised.id]) {
+        const updated: WeekPlan = {
+          ...weekPlan,
+          dishes: { ...weekPlan.dishes, [revised.id]: revised },
+        };
+        setWeekPlan(updated);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重新生成失败');
+    } finally {
+      setRevising(false);
+    }
+  };
 
   if (!dish) {
     return (
@@ -78,8 +129,27 @@ export default function DishDetailPage() {
         ‹ 返回
       </button>
 
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {dayKind === 'review' && lastNote && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          上次你说：{lastNote}
+        </div>
+      )}
+
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-zinc-900">{dish.name}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold text-zinc-900">{dish.name}</h1>
+          {isInSeason(dish, solarWindow) && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+              应季
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm text-zinc-500">{dish.description}</p>
 
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
@@ -94,6 +164,14 @@ export default function DishDetailPage() {
               👥 {preferences.servings} 人份
             </span>
           )}
+          {(dish.solarTerms ?? []).map((t) => (
+            <span
+              key={t}
+              className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700"
+            >
+              {t}
+            </span>
+          ))}
         </div>
 
         {dish.usesFridgeItems.length > 0 && (
@@ -102,7 +180,6 @@ export default function DishDetailPage() {
           </div>
         )}
 
-        {/* 食材用量表 */}
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold">食材用量</h2>
           <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-100">
@@ -123,7 +200,6 @@ export default function DishDetailPage() {
           </ul>
         </section>
 
-        {/* 做法 */}
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold">分步做法</h2>
           <ol className="space-y-3">
@@ -139,9 +215,19 @@ export default function DishDetailPage() {
             ))}
           </ol>
         </section>
+
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={handleRevise}
+            disabled={revising}
+            className="btn btn-primary w-full disabled:opacity-50"
+          >
+            {revising ? '正在按笔记重写做法…' : '按改进要点重新生成做法'}
+          </button>
+        </div>
       </div>
 
-      {/* 历史改进笔记 */}
       {historyNotes.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold text-zinc-800">

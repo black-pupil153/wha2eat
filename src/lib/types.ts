@@ -33,7 +33,36 @@ export interface Dish {
   ingredients: Ingredient[];
   steps: string[];
   usesFridgeItems: string[]; // 命中的库存食材名
+  /** 所属廿四节气；旧数据缺省视为 [] */
+  solarTerms?: SolarTerm[];
 }
+
+/** 廿四节气 */
+export type SolarTerm =
+  | '立春'
+  | '雨水'
+  | '惊蛰'
+  | '春分'
+  | '清明'
+  | '谷雨'
+  | '立夏'
+  | '小满'
+  | '芒种'
+  | '夏至'
+  | '小暑'
+  | '大暑'
+  | '立秋'
+  | '处暑'
+  | '白露'
+  | '秋分'
+  | '寒露'
+  | '霜降'
+  | '立冬'
+  | '小雪'
+  | '大雪'
+  | '冬至'
+  | '小寒'
+  | '大寒';
 
 export interface DayPlan {
   date: string; // ISO 日期 YYYY-MM-DD
@@ -88,11 +117,13 @@ export interface CookRecord {
   createdAt: string; // ISO timestamp
 }
 
-/** 待复习菜品 */
+/** 待复习 / 库内占槽菜品 */
 export interface DueDish {
   dishId: string;
   dishName: string;
   overdueDays: number;
   lastCookedDate: string; // YYYY-MM-DD
   mastery: Mastery;
+  /** 应季分 0/1/2，见 solar.seasonScore */
+  seasonScore?: number;
 }

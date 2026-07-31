@@ -38,28 +38,30 @@ const DEMO_FRIDGE: FridgeItem[] = [
   { id: 'f10', name: '西兰花', level: 'low' },
 ];
 
-// ── 演示菜谱库（10 道历史菜 + 5 道新课 + 2 道复习 = 15 道）──
+// ── 演示菜谱库（含节气标签；大暑附近可演示应季优先）──
 function makeDemoDishLibrary(): Dish[] {
   return [
     // ── 拿手（mastered）──
-    { id: 'dish-01', name: '番茄炒蛋', description: '经典家常菜，酸甜开胃，10分钟上桌', minutes: 10, costLevel: 'low', ingredients: [{ name: '鸡蛋', amount: '3个', category: '肉蛋' }, { name: '西红柿', amount: '2个', category: '蔬菜' }, { name: '食用油', amount: '适量', category: '调味' }], steps: ['西红柿切块', '鸡蛋打散', '先炒鸡蛋', '再炒西红柿', '混合翻炒'], usesFridgeItems: ['鸡蛋', '西红柿'] },
-    { id: 'dish-02', name: '可乐鸡翅', description: '甜香浓郁，鸡翅嫩滑入味', minutes: 30, costLevel: 'mid', ingredients: [{ name: '鸡翅', amount: '8个', category: '肉蛋' }, { name: '可乐', amount: '1罐', category: '调味' }, { name: '生抽', amount: '2勺', category: '调味' }], steps: ['鸡翅划刀焯水', '锅中煎至金黄', '倒入可乐和生抽', '小火收汁'], usesFridgeItems: [] },
-    { id: 'dish-03', name: '红烧肉', description: '肥而不腻，入口即化', minutes: 60, costLevel: 'mid', ingredients: [{ name: '五花肉', amount: '500g', category: '肉蛋' }, { name: '冰糖', amount: '30g', category: '调味' }, { name: '生抽', amount: '3勺', category: '调味' }, { name: '老抽', amount: '1勺', category: '调味' }], steps: ['五花肉切块焯水', '冰糖炒色', '加入肉块翻炒', '加水没过肉块', '小火炖40分钟'], usesFridgeItems: [] },
-    // ── 熟悉（familiar）──
-    { id: 'dish-04', name: '麻婆豆腐', description: '麻辣鲜香，下饭神器', minutes: 20, costLevel: 'low', ingredients: [{ name: '豆腐', amount: '1块', category: '肉蛋' }, { name: '猪肉末', amount: '100g', category: '肉蛋' }, { name: '花椒', amount: '适量', category: '调味' }, { name: '豆瓣酱', amount: '1勺', category: '调味' }], steps: ['豆腐切块焯水', '炒香肉末和豆瓣酱', '加入豆腐和少量水', '煮3分钟勾芡', '撒花椒粉'], usesFridgeItems: ['豆腐'] },
-    { id: 'dish-05', name: '糖醋排骨', description: '酸甜适口，色泽红亮', minutes: 40, costLevel: 'mid', ingredients: [{ name: '排骨', amount: '400g', category: '肉蛋' }, { name: '醋', amount: '3勺', category: '调味' }, { name: '糖', amount: '2勺', category: '调味' }, { name: '生抽', amount: '2勺', category: '调味' }], steps: ['排骨焯水', '煎至两面金黄', '加糖醋生抽调味', '小火收汁'], usesFridgeItems: [] },
-    { id: 'dish-06', name: '鱼香肉丝', description: '酸甜微辣，经典川味', minutes: 25, costLevel: 'mid', ingredients: [{ name: '猪肉丝', amount: '200g', category: '肉蛋' }, { name: '木耳', amount: '适量', category: '蔬菜' }, { name: '胡萝卜', amount: '1根', category: '蔬菜' }, { name: '青椒', amount: '1个', category: '蔬菜' }], steps: ['肉丝腌制', '调鱼香汁', '炒肉丝盛出', '炒配菜', '混合翻炒'], usesFridgeItems: ['胡萝卜', '青椒'] },
-    // ── 学习中（learning）──
-    { id: 'dish-07', name: '宫保鸡丁', description: '香辣酥脆，花生点睛', minutes: 20, costLevel: 'mid', ingredients: [{ name: '鸡胸肉', amount: '300g', category: '肉蛋' }, { name: '花生', amount: '50g', category: '其他' }, { name: '干辣椒', amount: '5个', category: '调味' }, { name: '葱段', amount: '适量', category: '蔬菜' }], steps: ['鸡丁腌制', '炸花生备用', '炒鸡丁至变色', '加干辣椒和葱段', '倒入花生翻匀'], usesFridgeItems: ['鸡胸肉'] },
-    { id: 'dish-08', name: '蒜蓉西兰花', description: '清淡健康，蒜香提味', minutes: 15, costLevel: 'low', ingredients: [{ name: '西兰花', amount: '200g', category: '蔬菜' }, { name: '蒜末', amount: '3瓣', category: '调味' }], steps: ['西兰花焯水', '炒香蒜末', '加入西兰花翻炒', '调味出锅'], usesFridgeItems: ['西兰花'] },
-    { id: 'dish-09', name: '青椒炒蛋', description: '快手素菜，营养均衡', minutes: 15, costLevel: 'low', ingredients: [{ name: '鸡蛋', amount: '2个', category: '肉蛋' }, { name: '青椒', amount: '2个', category: '蔬菜' }], steps: ['青椒切丝', '鸡蛋打散', '先炒蛋', '再炒青椒', '混合'], usesFridgeItems: ['鸡蛋', '青椒'] },
-    { id: 'dish-10', name: '酸汤肥牛', description: '酸辣开胃，肥牛嫩滑', minutes: 20, costLevel: 'mid', ingredients: [{ name: '肥牛', amount: '300g', category: '肉蛋' }, { name: '西红柿', amount: '2个', category: '蔬菜' }, { name: '金针菇', amount: '100g', category: '蔬菜' }], steps: ['西红柿炒出汁', '加水煮沸', '下金针菇煮2分钟', '下肥牛涮熟'], usesFridgeItems: ['西红柿'] },
-    // ── 本周新课（5 道）──
-    { id: 'dish-n1', name: '清蒸鲈鱼', description: '鲜嫩清淡，蒸鱼豉油提味', minutes: 25, costLevel: 'mid', ingredients: [{ name: '鲈鱼', amount: '1条', category: '肉蛋' }, { name: '葱姜', amount: '适量', category: '蔬菜' }, { name: '蒸鱼豉油', amount: '2勺', category: '调味' }], steps: ['鲈鱼处理干净', '放葱姜蒸8分钟', '倒掉蒸汁', '淋蒸鱼豉油和热油'], usesFridgeItems: [] },
-    { id: 'dish-n2', name: '蒜蓉菠菜', description: '补铁快手菜，3分钟搞定', minutes: 10, costLevel: 'low', ingredients: [{ name: '菠菜', amount: '300g', category: '蔬菜' }, { name: '蒜末', amount: '2瓣', category: '调味' }], steps: ['菠菜焯水', '炒香蒜末', '加入菠菜翻炒'], usesFridgeItems: [] },
-    { id: 'dish-n3', name: '蛋炒饭', description: '粒粒分明，冰箱清库存利器', minutes: 15, costLevel: 'low', ingredients: [{ name: '大米', amount: '1碗', category: '主食' }, { name: '鸡蛋', amount: '2个', category: '肉蛋' }, { name: '胡萝卜', amount: '半根', category: '蔬菜' }, { name: '洋葱', amount: '半个', category: '蔬菜' }], steps: ['隔夜米饭备用', '炒散鸡蛋', '加入蔬菜丁翻炒', '倒入米饭炒匀'], usesFridgeItems: ['鸡蛋', '胡萝卜', '洋葱', '大米'] },
-    { id: 'dish-n4', name: '凉拌黄瓜', description: '爽脆开胃，夏日必备', minutes: 10, costLevel: 'low', ingredients: [{ name: '黄瓜', amount: '2根', category: '蔬菜' }, { name: '蒜末', amount: '2瓣', category: '调味' }, { name: '醋', amount: '1勺', category: '调味' }], steps: ['黄瓜拍碎切段', '加蒜末、醋、盐拌匀'], usesFridgeItems: [] },
-    { id: 'dish-n5', name: '冬瓜排骨汤', description: '清甜滋补，慢炖出鲜', minutes: 45, costLevel: 'mid', ingredients: [{ name: '排骨', amount: '300g', category: '肉蛋' }, { name: '冬瓜', amount: '300g', category: '蔬菜' }, { name: '姜片', amount: '3片', category: '调味' }], steps: ['排骨焯水', '加水放姜片大火煮开', '转小火炖30分钟', '加冬瓜再炖10分钟'], usesFridgeItems: [] },
+    { id: 'dish-01', name: '番茄炒蛋', description: '经典家常菜，酸甜开胃，10分钟上桌', minutes: 10, costLevel: 'low', ingredients: [{ name: '鸡蛋', amount: '3个', category: '肉蛋' }, { name: '西红柿', amount: '2个', category: '蔬菜' }, { name: '食用油', amount: '适量', category: '调味' }], steps: ['西红柿切块', '鸡蛋打散', '先炒鸡蛋', '再炒西红柿', '混合翻炒'], usesFridgeItems: ['鸡蛋', '西红柿'], solarTerms: ['立夏', '小满'] },
+    { id: 'dish-02', name: '可乐鸡翅', description: '甜香浓郁，鸡翅嫩滑入味', minutes: 30, costLevel: 'mid', ingredients: [{ name: '鸡翅', amount: '8个', category: '肉蛋' }, { name: '可乐', amount: '1罐', category: '调味' }, { name: '生抽', amount: '2勺', category: '调味' }], steps: ['鸡翅划刀焯水', '锅中煎至金黄', '倒入可乐和生抽', '小火收汁'], usesFridgeItems: [], solarTerms: ['立冬', '小雪'] },
+    { id: 'dish-03', name: '红烧肉', description: '肥而不腻，入口即化', minutes: 60, costLevel: 'mid', ingredients: [{ name: '五花肉', amount: '500g', category: '肉蛋' }, { name: '冰糖', amount: '30g', category: '调味' }, { name: '生抽', amount: '3勺', category: '调味' }, { name: '老抽', amount: '1勺', category: '调味' }], steps: ['五花肉切块焯水', '冰糖炒色', '加入肉块翻炒', '加水没过肉块', '小火炖40分钟'], usesFridgeItems: [], solarTerms: ['冬至', '小寒'] },
+    // ── 熟悉（familiar）过季到期──
+    { id: 'dish-04', name: '麻婆豆腐', description: '麻辣鲜香，下饭神器', minutes: 20, costLevel: 'low', ingredients: [{ name: '豆腐', amount: '1块', category: '肉蛋' }, { name: '猪肉末', amount: '100g', category: '肉蛋' }, { name: '花椒', amount: '适量', category: '调味' }, { name: '豆瓣酱', amount: '1勺', category: '调味' }], steps: ['豆腐切块焯水', '炒香肉末和豆瓣酱', '加入豆腐和少量水', '煮3分钟勾芡', '撒花椒粉'], usesFridgeItems: ['豆腐'], solarTerms: ['立冬'] },
+    { id: 'dish-05', name: '糖醋排骨', description: '酸甜适口，色泽红亮', minutes: 40, costLevel: 'mid', ingredients: [{ name: '排骨', amount: '400g', category: '肉蛋' }, { name: '醋', amount: '3勺', category: '调味' }, { name: '糖', amount: '2勺', category: '调味' }, { name: '生抽', amount: '2勺', category: '调味' }], steps: ['排骨焯水', '煎至两面金黄', '加糖醋生抽调味', '小火收汁'], usesFridgeItems: [], solarTerms: ['霜降'] },
+    { id: 'dish-06', name: '鱼香肉丝', description: '酸甜微辣，经典川味', minutes: 25, costLevel: 'mid', ingredients: [{ name: '猪肉丝', amount: '200g', category: '肉蛋' }, { name: '木耳', amount: '适量', category: '蔬菜' }, { name: '胡萝卜', amount: '1根', category: '蔬菜' }, { name: '青椒', amount: '1个', category: '蔬菜' }], steps: ['肉丝腌制', '调鱼香汁', '炒肉丝盛出', '炒配菜', '混合翻炒'], usesFridgeItems: ['胡萝卜', '青椒'], solarTerms: ['惊蛰'] },
+    // ── 学习中 + 应季未到期（大暑）──
+    { id: 'dish-07', name: '宫保鸡丁', description: '香辣酥脆，花生点睛', minutes: 20, costLevel: 'mid', ingredients: [{ name: '鸡胸肉', amount: '300g', category: '肉蛋' }, { name: '花生', amount: '50g', category: '其他' }, { name: '干辣椒', amount: '5个', category: '调味' }, { name: '葱段', amount: '适量', category: '蔬菜' }], steps: ['鸡丁腌制', '炸花生备用', '炒鸡丁至变色', '加干辣椒和葱段', '倒入花生翻匀'], usesFridgeItems: ['鸡胸肉'], solarTerms: ['立春'] },
+    { id: 'dish-08', name: '蒜蓉西兰花', description: '清淡健康，蒜香提味', minutes: 15, costLevel: 'low', ingredients: [{ name: '西兰花', amount: '200g', category: '蔬菜' }, { name: '蒜末', amount: '3瓣', category: '蔬菜' }], steps: ['西兰花焯水', '炒香蒜末', '加入西兰花翻炒', '调味出锅'], usesFridgeItems: ['西兰花'], solarTerms: ['小雪'] },
+    { id: 'dish-09', name: '青椒炒蛋', description: '快手素菜，营养均衡', minutes: 15, costLevel: 'low', ingredients: [{ name: '鸡蛋', amount: '2个', category: '肉蛋' }, { name: '青椒', amount: '2个', category: '蔬菜' }], steps: ['青椒切丝', '鸡蛋打散', '先炒蛋', '再炒青椒', '混合'], usesFridgeItems: ['鸡蛋', '青椒'], solarTerms: ['谷雨'] },
+    { id: 'dish-10', name: '酸汤肥牛', description: '酸辣开胃，肥牛嫩滑', minutes: 20, costLevel: 'mid', ingredients: [{ name: '肥牛', amount: '300g', category: '肉蛋' }, { name: '西红柿', amount: '2个', category: '蔬菜' }, { name: '金针菇', amount: '100g', category: '蔬菜' }], steps: ['西红柿炒出汁', '加水煮沸', '下金针菇煮2分钟', '下肥牛涮熟'], usesFridgeItems: ['西红柿'], solarTerms: ['雨水'] },
+    // 应季未到期：大暑挂牌，挤占过季到期名额
+    { id: 'dish-11', name: '凉拌苦瓜', description: '清苦解暑，大暑必备', minutes: 15, costLevel: 'low', ingredients: [{ name: '苦瓜', amount: '2根', category: '蔬菜' }, { name: '蒜末', amount: '2瓣', category: '蔬菜' }, { name: '生抽', amount: '1勺', category: '调味' }], steps: ['苦瓜切片焯水', '加蒜末生抽拌匀'], usesFridgeItems: [], solarTerms: ['大暑', '小暑'] },
+    // ── 本周新课 ──
+    { id: 'dish-n1', name: '清蒸鲈鱼', description: '鲜嫩清淡，蒸鱼豉油提味', minutes: 25, costLevel: 'mid', ingredients: [{ name: '鲈鱼', amount: '1条', category: '肉蛋' }, { name: '葱姜', amount: '适量', category: '蔬菜' }, { name: '蒸鱼豉油', amount: '2勺', category: '调味' }], steps: ['鲈鱼处理干净', '放葱姜蒸8分钟', '倒掉蒸汁', '淋蒸鱼豉油和热油'], usesFridgeItems: [], solarTerms: ['大暑'] },
+    { id: 'dish-n2', name: '蒜蓉菠菜', description: '补铁快手菜，3分钟搞定', minutes: 10, costLevel: 'low', ingredients: [{ name: '菠菜', amount: '300g', category: '蔬菜' }, { name: '蒜末', amount: '2瓣', category: '蔬菜' }], steps: ['菠菜焯水', '炒香蒜末', '加入菠菜翻炒'], usesFridgeItems: [], solarTerms: ['立秋'] },
+    { id: 'dish-n3', name: '蛋炒饭', description: '粒粒分明，冰箱清库存利器', minutes: 15, costLevel: 'low', ingredients: [{ name: '大米', amount: '1碗', category: '主食' }, { name: '鸡蛋', amount: '2个', category: '肉蛋' }, { name: '胡萝卜', amount: '半根', category: '蔬菜' }, { name: '洋葱', amount: '半个', category: '蔬菜' }], steps: ['隔夜米饭备用', '炒散鸡蛋', '加入蔬菜丁翻炒', '倒入米饭炒匀'], usesFridgeItems: ['鸡蛋', '胡萝卜', '洋葱', '大米'], solarTerms: ['小暑'] },
+    { id: 'dish-n4', name: '凉拌黄瓜', description: '爽脆开胃，夏日必备', minutes: 10, costLevel: 'low', ingredients: [{ name: '黄瓜', amount: '2根', category: '蔬菜' }, { name: '蒜末', amount: '2瓣', category: '蔬菜' }, { name: '醋', amount: '1勺', category: '调味' }], steps: ['黄瓜拍碎切段', '加蒜末、醋、盐拌匀'], usesFridgeItems: [], solarTerms: ['大暑'] },
+    { id: 'dish-n5', name: '冬瓜排骨汤', description: '清甜滋补，慢炖出鲜', minutes: 45, costLevel: 'mid', ingredients: [{ name: '排骨', amount: '300g', category: '肉蛋' }, { name: '冬瓜', amount: '300g', category: '蔬菜' }, { name: '姜片', amount: '3片', category: '蔬菜' }], steps: ['排骨焯水', '加水放姜片大火煮开', '转小火炖30分钟', '加冬瓜再炖10分钟'], usesFridgeItems: [], solarTerms: ['大暑', '立秋'] },
   ];
 }
 
@@ -105,9 +107,11 @@ function makeDemoCookRecords(): CookRecord[] {
     // 蒜蓉西兰花：1次，学习中，最近5天前，note「蒜末最后放」，已到期（3天间隔）
     mk('dish-08', '蒜蓉西兰花', 5, 2, '蒜末最后放'),
     // 青椒炒蛋：1次，学习中，踩雷，最近4天前，note「青椒去籽减辣」，已到期（踩雷2天间隔）
-    mk('dish-09', '青椒炒蛋', 4, 1, '青椒去籽减辣'),
+    mk('dish-09', '青椒炒蛋', 4, 1, '盐减半'),
     // 酸汤肥牛：1次，学习中，最近5天前，已到期（3天间隔）
     mk('dish-10', '酸汤肥牛', 5, 2),
+    // 凉拌苦瓜：应季（大暑）未到期——用于演示节气>复习
+    mk('dish-11', '凉拌苦瓜', 1, 3),
   ];
 }
 
@@ -124,7 +128,7 @@ function makeDemoWeekPlan(): WeekPlan {
   // 周一到周日：5 新课 + 2 复习 + 2 休息
   const schedule: { dayOffset: number; dishId: string | null; kind?: 'new' | 'review'; takeout: boolean }[] = [
     { dayOffset: 0, dishId: 'dish-n1', kind: 'new', takeout: false },     // 周一：清蒸鲈鱼（新课）
-    { dayOffset: 1, dishId: 'dish-04', kind: 'review', takeout: false },   // 周二：麻婆豆腐（复习）
+    { dayOffset: 1, dishId: 'dish-11', kind: 'review', takeout: false },   // 周二：凉拌苦瓜（应季库内）
     { dayOffset: 2, dishId: 'dish-n2', kind: 'new', takeout: false },     // 周三：蒜蓉菠菜（新课）
     { dayOffset: 3, dishId: 'dish-n3', kind: 'new', takeout: false },     // 周四：蛋炒饭（新课）
     { dayOffset: 4, dishId: 'dish-07', kind: 'review', takeout: false },   // 周五：宫保鸡丁（复习）
@@ -159,14 +163,15 @@ function HomeInner() {
   useEffect(() => {
     if (!ready) return;
 
-    const isDemo = searchParams.get('demo') === '2';
+    const isDemo = searchParams.get('demo') === '1';
     if (isDemo) {
-      // 幂等：强制覆盖写入全部 demo 数据
+      // 幂等：无论是否已有偏好/旧数据，一律覆盖写入 demo 数据后再跳转
       setPreferences(DEMO_PREFERENCES);
-      setFridge(DEMO_FRIDGE);
       setCookRecords(makeDemoCookRecords());
       setDishLibrary(makeDemoDishLibrary());
+      // 先菜单再冰箱；setFridge 会按最新菜单重算采购
       setWeekPlan(makeDemoWeekPlan());
+      setFridge(DEMO_FRIDGE);
       router.replace('/plan');
       return;
     }

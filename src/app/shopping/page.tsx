@@ -4,137 +4,74 @@ import { useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/components/AppProvider';
 import { INGREDIENT_CATEGORIES } from '@/lib/constants';
-import type { ShoppingItem, WeekPlan, FridgeItem } from '@/lib/types';
+import { computeShopping, mergeShoppingList } from '@/lib/shopping';
+import type { FridgeItem } from '@/lib/types';
 
-const WEEKDAYS_SHORT = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-
-function dayLabel(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return WEEKDAYS_SHORT[d.getDay()];
-}
-
-/**
- * 解析数量字符串，提取数值和单位。
- * 例: "200g" → { value: 200, unit: "g" }
- *      "3个" → { value: 3, unit: "个" }
- *      "适量" → null
- */
-function parseAmount(raw: string): { value: number; unit: string } | null {
-  const m = raw.trim().match(/^(\d+(?:\.\d+)?)\s*(.+)$/);
-  if (!m) return null;
-  return { value: parseFloat(m[1]), unit: m[2].trim() };
-}
-
-/**
- * 同单位数值加总；单位不同或无法解析时保留原样拼接。
- */
-function addAmounts(a: string, b: string): string {
-  const pa = parseAmount(a);
-  const pb = parseAmount(b);
-  if (pa && pb && pa.unit === pb.unit) {
-    const sum = pa.value + pb.value;
-    // 整数不显示小数点
-    const num = Number.isInteger(sum) ? sum.toString() : sum.toFixed(1);
-    return `${num}${pa.unit}`;
-  }
-  return `${a} + ${b}`;
-}
-
-function computeShopping(
-  weekPlan: WeekPlan,
-  fridge: FridgeItem[]
-): ShoppingItem[] {
-  const fridgeSet = new Set(
-    fridge.map((n) => n.name.trim().toLowerCase())
-  );
-
-  // 收集未做过的天的菜品食材，并记录每道食材被哪些菜使用
-  const merged = new Map<string, ShoppingItem>();
-  const usageMap = new Map<string, string[]>(); // key → ["周三 番茄炒蛋", ...]
-
-  for (const day of weekPlan.days) {
-    if (day.isTakeout || day.isCooked || !day.dishId) continue;
-    const dish = weekPlan.dishes[day.dishId];
-    if (!dish) continue;
-    const label = `${dayLabel(day.date)} ${dish.name}`;
-    for (const ing of dish.ingredients) {
-      const key = `${ing.name}__${ing.category}`;
-      const existing = merged.get(key);
-      if (existing) {
-        existing.amount = addAmounts(existing.amount, ing.amount);
-      } else {
-        merged.set(key, {
-          name: ing.name,
-          amount: ing.amount,
-          category: ing.category,
-          checked: false,
-        });
-      }
-      const usages = usageMap.get(key) ?? [];
-      usages.push(label);
-      usageMap.set(key, usages);
-    }
-  }
-
-  // 减去冰箱已有的，并为多次使用的食材添加「建议多买」标签
-  const result: ShoppingItem[] = [];
-  for (const [key, item] of merged) {
-    if (fridgeSet.has(item.name.trim().toLowerCase())) continue;
-    const usages = usageMap.get(key) ?? [];
-    if (usages.length >= 2) {
-      item.suggestExtra = usages.join(' + ');
-    }
-    result.push(item);
-  }
-  return result;
+function newFridgeId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `f-${Date.now()}`;
 }
 
 export default function ShoppingPage() {
-  const { ready, weekPlan, fridge, shopping, setShopping } = useApp();
+  const { ready, weekPlan, fridge, shopping, setShopping, setFridge } = useApp();
 
   // 记录用户手动删除的食材 key（name__category），防止 useEffect 重新加回
   const deletedKeysRef = useRef<Set<string>>(new Set());
 
-  // 根据当前菜单自动计算采购清单（仅首次或菜单变化时）
   const computed = useMemo(() => {
     if (!weekPlan) return [];
     return computeShopping(weekPlan, fridge);
   }, [weekPlan, fridge]);
 
-  // 当菜单变化（换一道/不想做饭/重新生成）时，重新计算并保留已有勾选状态
+  // 过滤手动删除项，并与 AppProvider 同步结果对齐
   useEffect(() => {
     if (!ready) return;
-    // 过滤掉用户已删除的项
     const filtered = computed.filter(
       (c) => !deletedKeysRef.current.has(`${c.name}__${c.category}`)
     );
-    // 构建旧列表的 checked 映射（name+category → checked）
-    const prevChecked = new Map(
-      shopping.map((s) => [`${s.name}__${s.category}`, s.checked])
-    );
-    // 将已保存的勾选状态合并到新计算结果
-    const merged = filtered.map((c) => ({
-      ...c,
-      checked: prevChecked.get(`${c.name}__${c.category}`) ?? false,
-    }));
-    // 仅在列表内容（名称+分类+数量）确实变化时才更新，避免无限循环
-    const changed =
-      merged.length !== shopping.length ||
-      merged.some(
-        (m, i) =>
-          shopping[i]?.name !== m.name ||
-          shopping[i]?.category !== m.category ||
-          shopping[i]?.amount !== m.amount
-      );
-    if (changed) {
+    const merged = mergeShoppingList(filtered, shopping);
+    if (merged !== shopping) {
       setShopping(merged);
     }
   }, [ready, computed, shopping, setShopping]);
 
+  // 勾选「已买」→ 写入冰箱（setFridge 会重算待购并移出该项）
+  // 取消勾选且仍在清单 → 移出冰箱（重算后回到待购）
   const toggleChecked = (idx: number) => {
-    setShopping(
-      shopping.map((s, i) => (i === idx ? { ...s, checked: !s.checked } : s))
-    );
+    const item = shopping[idx];
+    if (!item) return;
+    const nextChecked = !item.checked;
+    const nameKey = item.name.trim().toLowerCase();
+
+    if (nextChecked) {
+      const exists = fridge.some(
+        (f) => f.name.trim().toLowerCase() === nameKey
+      );
+      if (!exists) {
+        const fridgeItem: FridgeItem = {
+          id: newFridgeId(),
+          name: item.name.trim(),
+          level: 'some',
+        };
+        setFridge([...fridge, fridgeItem]);
+      } else {
+        setShopping(shopping.filter((_, i) => i !== idx));
+      }
+    } else {
+      const removeAt = fridge.findIndex(
+        (f) => f.name.trim().toLowerCase() === nameKey
+      );
+      if (removeAt >= 0) {
+        setFridge(fridge.filter((_, i) => i !== removeAt));
+      } else {
+        setShopping(
+          shopping.map((s, i) =>
+            i === idx ? { ...s, checked: false } : s
+          )
+        );
+      }
+    }
   };
 
   const removeItem = useCallback(

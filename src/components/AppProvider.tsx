@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -17,6 +18,7 @@ import type {
   Dish,
 } from '@/lib/types';
 import { storage } from '@/lib/storage';
+import { computeShopping, mergeShoppingList } from '@/lib/shopping';
 
 interface AppContextValue {
   ready: boolean;
@@ -50,6 +52,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dishLibrary, setDishLibraryState] = useState<Dish[]>([]);
   const [recentDishes, setRecentDishesState] = useState<string[]>([]);
 
+  const fridgeRef = useRef(fridge);
+  const weekPlanRef = useRef(weekPlan);
+
+  useEffect(() => {
+    fridgeRef.current = fridge;
+    weekPlanRef.current = weekPlan;
+  }, [fridge, weekPlan]);
+
+  // 按菜单 − 冰箱重算待购，保留勾选
+  const syncShoppingFrom = useCallback(
+    (nextFridge: FridgeItem[], nextPlan: WeekPlan | null) => {
+      if (!nextPlan) return;
+      setShoppingState((prev) => {
+        const next = mergeShoppingList(
+          computeShopping(nextPlan, nextFridge),
+          prev
+        );
+        if (next !== prev) storage.setShopping(next);
+        return next;
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 水合，仅挂载时执行一次
     setPreferencesState(storage.getPreferences());
@@ -67,15 +93,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setPreferencesState(p);
   }, []);
 
-  const setFridge = useCallback((items: FridgeItem[]) => {
-    storage.setFridge(items);
-    setFridgeState(items);
-  }, []);
+  const setFridge = useCallback(
+    (items: FridgeItem[]) => {
+      storage.setFridge(items);
+      fridgeRef.current = items;
+      setFridgeState(items);
+      // 冰箱变更立刻重算采购（含在冰箱页删除后应回到待购）
+      syncShoppingFrom(items, weekPlanRef.current);
+    },
+    [syncShoppingFrom]
+  );
 
-  const setWeekPlan = useCallback((plan: WeekPlan | null) => {
-    storage.setWeekPlan(plan);
-    setWeekPlanState(plan);
-  }, []);
+  const setWeekPlan = useCallback(
+    (plan: WeekPlan | null) => {
+      storage.setWeekPlan(plan);
+      weekPlanRef.current = plan;
+      setWeekPlanState(plan);
+      syncShoppingFrom(fridgeRef.current, plan);
+    },
+    [syncShoppingFrom]
+  );
 
   const setShopping = useCallback((items: ShoppingItem[]) => {
     storage.setShopping(items);

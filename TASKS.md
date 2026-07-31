@@ -44,7 +44,7 @@ useEffect 的重算逻辑会把删掉的项目自动加回（删除永远留不�
 任务：?demo=1 时无论现有数据如何都进入演示态（覆盖写入 demo 数据后再跳转），重复触发结果一致。
 只改 demo 逻辑所在文件（T01 报告有位置）。完成后跑 pnpm build，并用"先正常用一遍再开 ?demo=1"验证。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T04 LLM 超时与错误兜底
 ```
@@ -52,7 +52,7 @@ useEffect 的重算逻辑会把删掉的项目自动加回（删除永远留不�
 超时/接口错误/重试耗尽时抛出用户可读的错误信息；plan 页和 dish 页的生成按钮在失败时显示该信息
 （不得静默或一直转圈）。只改 llm.ts 和两处页面按钮的错误展示。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T05 品牌统一 + 清理
 ```
@@ -60,7 +60,7 @@ useEffect 的重算逻辑会把删掉的项目自动加回（删除永远留不�
 删除 public/ 下脚手架 svg（next/vercel/globe/window/file）并替换 favicon 为简单文字或餐具 emoji 风格；
 删除或从 lint 中排除 .vercel-tmp/ 目录。完成后跑 pnpm build 和 pnpm lint（lint 允许 warning，不允许 error）。
 ```
-- [ ] 完成
+- [x] 完成
 
 ---
 
@@ -72,7 +72,7 @@ useEffect 的重算逻辑会把删掉的项目自动加回（删除永远留不�
 DayPlan 增加 kind?: 'new'|'review'；constants.ts 的 STORAGE_KEYS 增加 cookRecords 和 dishLibrary。
 只改这两个文件，不动任何现有类型字段。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T07 存储层扩展
 ```
@@ -82,17 +82,32 @@ addCookRecord 要与现有「做过了」库存扣减逻辑协作（T01 报告�
 每次生成新菜单时把新菜自动 upsert 进菜谱库。只改 storage.ts、AppProvider.tsx（及必要接线处）。
 完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
-### T08 复习调度纯函数
+### T08 复习调度纯函数（对齐 PRD §5）
 ```
-读 AGENTS.md、PRD.md §5。任务：新建 src/lib/review.ts，实现 getMastery(records)、
-getIntervalDays(mastery, lastRating)、getDueDishes(records, library, today)、
-selectReviewDishes(due, cookDaysPerWeek)（名额 = min(3, floor(天数/2), 到期数)，按 overdueDays 降序）。
-日期一律用本地时区 YYYY-MM-DD 比较，不用 toISOString。纯函数，不碰 UI 和 localStorage。
-新建这一个文件。完成后跑 pnpm build。
+读 AGENTS.md、PRD.md §5。任务：对齐 src/lib/review.ts——getMastery（≥3 次且最近评 3→mastered）、
+getIntervalDays（learning3/familiar7/mastered21，踩雷一律2）、getDueDishes（到期用 ≥）、
+selectLibrarySlots（名额 min(3,floor(天数/2),候选数)；候选=库内做过至少1次；排序 seasonScore 降序再 overdueDays 降序，未到期 overdueDays=-1）。
+保留 selectReviewDishes 作别名。history 页改调 getMastery。纯函数，不碰 UI/storage。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
+
+### T08b 节气纯函数
+```
+读 AGENTS.md、PRD.md §5.1。任务：constants 增加廿四节气公历近似月日表；新建 src/lib/solar.ts，
+实现 getSolarTerm(date)、getSolarWindow(date)（当前±1）、seasonScore(dish, window)（当前2/邻接1/否则0）。
+纯函数。完成后跑 pnpm build。
+```
+- [x] 完成
+
+### T08c Dish.solarTerms + LLM
+```
+读 AGENTS.md、PRD.md §4、§6.1。任务：types.ts Dish 增加 solarTerms: SolarTerm[]（旧数据缺省 []）；
+llm.ts 生成周菜单/单菜注入节气窗文案，JSON 必出 solarTerms，校验容错。只改 types + llm（及必要校验）。
+完成后跑 pnpm build。
+```
+- [x] 完成
 
 ### T09 课程表生成合并逻辑
 ```
@@ -101,15 +116,15 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 （复习日 kind='review'），复习菜快照写入 WeekPlan.dishes。lib/llm.ts 生成数量改为参数。
 只改这两个文件。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T10 plan 页接通课程表 + 徽章
 ```
-读 AGENTS.md、PRD.md §3.2。任务：/plan 页生成菜单时先用 review.ts 算到期复习菜（从菜谱库取快照），
-随请求传给 /api/plan；渲染时每道菜显示「新课/复习」徽章，复习菜下方显示上次改进要点（如有）。
-只改 src/app/plan/page.tsx。完成后跑 pnpm build + ?demo=1 smoke。
+读 AGENTS.md、PRD.md §3.2、§5、§5.1。任务：/plan 生成菜单时用 solar 窗 + selectLibrarySlots（节气>到期）
+从菜谱库取快照，随请求传给 /api/plan；渲染「新课/复习」徽章，命中节气窗另加「应季」；
+复习菜下方显示上次改进要点（如有）。只改 src/app/plan/page.tsx。完成后跑 pnpm build + ?demo=1 smoke。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T11 「做过了」弹窗：评分 + 笔记（唯一入口）
 ```
@@ -120,7 +135,7 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 （WeekPlan.dishes 找不到时查 dishLibrary）。只改 plan/page.tsx 和 dish/[id]/page.tsx。
 完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T12 按改进要点重新生成做法
 ```
@@ -129,14 +144,14 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 新建 app/api/dish/revise/route.ts；/dish/[id] 加「按改进要点重新生成做法」按钮，
 结果写回菜谱库并同步 WeekPlan 同 id 快照。只改这三个文件。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T13 复习横幅
 ```
 读 AGENTS.md、PRD.md §3.3。任务：/dish/[id] 对 kind='review' 的菜在顶部显示横幅
 "上次你说：{最近一条改进要点}"，无笔记不显示。只改该页面。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T14 换一道：复习分支
 ```
@@ -144,7 +159,7 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 （不调 LLM，从菜谱库取快照）；无剩余到期菜时退化为现有新课换菜逻辑。联动重算采购清单。
 只改 plan/page.tsx。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T15 吃菜回溯页
 ```
@@ -152,7 +167,7 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 上次日期、掌握度徽章（学习中/熟悉/拿手）、最近评分，点击跳 /dish/[id]（走菜谱库）；
 顶部统计：累计做过 X 道、拿手 Y 道。Nav.tsx 加「回溯」入口。完成后跑 pnpm build。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T16 demo 数据升级
 ```
@@ -161,7 +176,7 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 对应 Dish 进菜谱库；保证 ?demo=1 后重新生成课程表能直接演示完整复习链路。保持 T03 的幂等性。
 完成后跑 pnpm build + 全流程验证。
 ```
-- [ ] 完成
+- [x] 完成
 
 ---
 
@@ -174,7 +189,7 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 可选展示一句用户改进笔记、落款"今晚吃什么"。整体配色和留白达到小红书发布水准。
 只改 ShareCard 相关文件。完成后跑 pnpm build，导出 PNG 检查比例和可读性。
 ```
-- [ ] 完成
+- [x] 完成
 
 ### T18 README 重写
 ```
@@ -182,7 +197,7 @@ LLM 只生成（做饭天数 − 复习数）道新菜；route 代码把复习�
 （墨墨背单词式做饭助手：新菜+复习+自动采购）、四大卖点、线上链接（先留占位符 __PROD_URL__）、
 演示路径（?demo=1 六步动线）、技术栈、外滩黑客松 × Qoder 赛道信息。只改 README.md。
 ```
-- [ ] 完成
+- [x] 完成
 
 ---
 

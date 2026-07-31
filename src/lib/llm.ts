@@ -8,8 +8,11 @@ import type {
   LLMPlanResult,
   LLMAssignment,
   DueDish,
+  SolarTerm,
 } from './types';
-import { BUDGET_LABEL, STOCK_LEVEL_LABEL } from './constants';
+import { BUDGET_LABEL, STOCK_LEVEL_LABEL, SOLAR_TERMS } from './constants';
+import type { SolarWindow } from './solar';
+import { getSolarWindow } from './solar';
 
 const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
 const MODEL = 'deepseek-chat';
@@ -37,9 +40,16 @@ function getApiKey(): string {
   return key;
 }
 
-function buildSystemPrompt(): string {
+function formatSolarWindow(window: SolarWindow): string {
+  return `当前节气：${window.current}；邻接：${window.prev}、${window.next}`;
+}
+
+function buildSystemPrompt(window?: SolarWindow): string {
+  const solarLine = window
+    ? `8. 硬约束：优先选用「${window.current}」及邻接「${window.prev}/${window.next}」的应季食材与菜式；每道菜必须给出 solarTerms（廿四节气中文名数组，至少含 1 个相关节气）。`
+    : '8. 每道菜必须给出 solarTerms（廿四节气中文名数组）。';
   return [
-    '你是一名资深家常菜营养师，擅长根据用户偏好与冰箱库存规划一周晚餐菜单。',
+    '你是一名资深家常菜营养师，擅长根据用户偏好、冰箱库存与节气规划一周晚餐菜单。',
     '请严格遵循以下规则：',
     '1. 忌口/过敏原是硬约束，绝不能在菜品中出现对应食材。',
     '2. 符合用户口味偏好与预算档。',
@@ -48,6 +58,7 @@ function buildSystemPrompt(): string {
     '5. 不与近期吃过的菜名重复；一周内部菜品类型错开（荤素/口味/烹饪方式）。',
     '6. 工作日耗时 ≤ 30 分钟，周末可放宽至 60 分钟。',
     '7. 食材用量需按就餐人数换算。',
+    solarLine,
     '',
     '只返回合法 JSON，不要输出任何解释、Markdown 或多余文字。JSON 结构如下：',
     '{',
@@ -60,15 +71,19 @@ function buildSystemPrompt(): string {
     '      "costLevel": "low",',
     '      "ingredients": [{"name":"番茄","amount":"2个","category":"蔬菜"}],',
     '      "steps": ["步骤1","步骤2"],',
-    '      "usesFridgeItems": ["番茄"]',
+    '      "usesFridgeItems": ["番茄"],',
+    '      "solarTerms": ["立夏","小满"]',
     '    }',
     '  ],',
     '  "assignments": [{"dayIndex": 0, "dishId": "d1"}]',
     '}',
     '',
     '约束：id 在 dishes 数组内唯一；dishId 必须能在 dishes 中找到；',
-    'assignments 数量等于要求的做饭天数；dayIndex 从 0 开始递增；',
-    'costLevel 只能是 low/mid/any；category 只能是 蔬菜/肉蛋/调味/主食/其他。',
+    'assignments 数量等于要求的新菜数；dayIndex 从 0 开始递增；',
+    'costLevel 只能是 low/mid/any；category 只能是 蔬菜/肉蛋/调味/主食/其他；',
+    'category 分类约定：葱/姜/蒜及其切法（葱段、姜片、蒜末等）归「蔬菜」（易腐鲜料需采购与冰箱管控）；',
+    '瓶罐袋装调味（生抽、老抽、盐、糖、醋、食用油、豆瓣酱、花椒等）归「调味」。',
+    `solarTerms 只能取自：${SOLAR_TERMS.join('、')}。`,
   ].join('\n');
 }
 
@@ -78,7 +93,8 @@ function buildPlanUserPrompt(
   recentDishes: string[],
   newCount: number,
   reviewDishes: DueDish[],
-  reviewNotes: Record<string, string>
+  reviewNotes: Record<string, string>,
+  window: SolarWindow
 ): string {
   const fridgeText =
     fridge.length > 0
@@ -92,7 +108,7 @@ function buildPlanUserPrompt(
   const recentText =
     recentDishes.length > 0 ? recentDishes.join('、') : '无';
 
-  // 复习菜信息（含上次改进要点）
+  // 库内占槽菜信息（含上次改进要点）
   const reviewText =
     reviewDishes.length > 0
       ? reviewDishes
@@ -111,19 +127,22 @@ function buildPlanUserPrompt(
     `口味偏好：${prefs.tastes.length ? prefs.tastes.join('、') : '无'}`,
     `预算档：${BUDGET_LABEL[prefs.budget] ?? prefs.budget}`,
     `本周做饭天数：${prefs.cookDaysPerWeek} 天`,
+    formatSolarWindow(window),
     `冰箱库存：${fridgeText}`,
     `近 2 周吃过的菜：${recentText}`,
-    `本周复习菜（不要重复生成）：${reviewText}`,
+    `本周库内安排菜（不要重复生成）：${reviewText}`,
     '',
-    `请生成 ${newCount} 道新菜（复习菜已由系统安排，无需你处理），assignments 数量必须等于 ${newCount}。`,
-    `新菜不得与复习菜（${reviewText}）同名。`,
+    `请生成 ${newCount} 道新菜（库内菜已由系统按节气优先安排，无需你处理），assignments 数量必须等于 ${newCount}。`,
+    `新菜必须偏应季（${window.current}/${window.prev}/${window.next}），并填写 solarTerms。`,
+    `新菜不得与库内安排菜（${reviewText}）同名。`,
   ].join('\n');
 }
 
 function buildDishUserPrompt(
   prefs: Preferences,
   fridge: FridgeItem[],
-  excludeDishNames: string[]
+  excludeDishNames: string[],
+  window: SolarWindow
 ): string {
   const fridgeText =
     fridge.length > 0
@@ -138,11 +157,12 @@ function buildDishUserPrompt(
     `忌口/过敏原：${prefs.avoidances.length ? prefs.avoidances.join('、') : '无'}`,
     `口味偏好：${prefs.tastes.length ? prefs.tastes.join('、') : '无'}`,
     `预算档：${BUDGET_LABEL[prefs.budget] ?? prefs.budget}`,
+    formatSolarWindow(window),
     `冰箱库存：${fridgeText}`,
     `需要排除的菜名：${excludeDishNames.length ? excludeDishNames.join('、') : '无'}`,
     '',
-    '请推荐 1 道符合约束的家常菜（工作日 ≤ 30 分钟），返回 JSON：',
-    '{"dish":{"id":"d-new","name":"...","description":"...","minutes":25,"costLevel":"low","ingredients":[{"name":"...","amount":"...","category":"蔬菜"}],"steps":["..."],"usesFridgeItems":["..."]}}',
+    '请推荐 1 道符合约束的应季家常菜（工作日 ≤ 30 分钟），返回 JSON：',
+    '{"dish":{"id":"d-new","name":"...","description":"...","minutes":25,"costLevel":"low","ingredients":[{"name":"...","amount":"...","category":"蔬菜"}],"steps":["..."],"usesFridgeItems":["..."],"solarTerms":["大暑"]}}',
   ].join('\n');
 }
 
@@ -155,6 +175,7 @@ interface RawDish {
   ingredients?: { name?: string; amount?: string; category?: string }[];
   steps?: string[];
   usesFridgeItems?: string[];
+  solarTerms?: string[];
 }
 
 interface RawPlan {
@@ -173,6 +194,18 @@ function normalizeCategory(v: unknown): IngredientCategory {
     (VALID_CATEGORIES as string[]).includes(v)
     ? (v as IngredientCategory)
     : '其他';
+}
+
+function normalizeSolarTerms(raw: unknown): SolarTerm[] {
+  if (!Array.isArray(raw)) return [];
+  const valid = new Set<string>(SOLAR_TERMS);
+  const out: SolarTerm[] = [];
+  for (const t of raw) {
+    if (typeof t === 'string' && valid.has(t) && !out.includes(t as SolarTerm)) {
+      out.push(t as SolarTerm);
+    }
+  }
+  return out;
 }
 
 function normalizeDish(raw: RawDish, fallbackId: string): Dish {
@@ -200,6 +233,7 @@ function normalizeDish(raw: RawDish, fallbackId: string): Dish {
           (s): s is string => typeof s === 'string'
         )
       : [],
+    solarTerms: normalizeSolarTerms(raw.solarTerms),
   };
 }
 
@@ -232,6 +266,14 @@ function validatePlan(raw: RawPlan): LLMPlanResult {
   return { dishes, assignments };
 }
 
+/** Node / 浏览器下 AbortController 超时错误判定 */
+function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const name = (err as { name?: string }).name;
+  if (name === 'AbortError') return true;
+  return typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError';
+}
+
 async function chat(messages: { role: string; content: string }[]): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -254,7 +296,7 @@ async function chat(messages: { role: string; content: string }[]): Promise<stri
     });
   } catch (err: unknown) {
     clearTimeout(timeoutId);
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    if (isAbortError(err)) {
       throw new Error('AI 响应超时（60 秒），请稍后重试');
     }
     throw new Error(
@@ -265,11 +307,14 @@ async function chat(messages: { role: string; content: string }[]): Promise<stri
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`DeepSeek 接口错误（${res.status}）：${text.slice(0, 200)}`);
+    throw new Error(`DeepSeek 接口错误（${res.status}）：${text.slice(0, 200) || '请稍后重试'}`);
   }
   const data = await res.json();
   const content: string =
     data?.choices?.[0]?.message?.content ?? '';
+  if (!content.trim()) {
+    throw new Error('AI 返回内容为空，请稍后重试');
+  }
   return content;
 }
 
@@ -282,13 +327,29 @@ export async function generateWeekPlan(
   recentDishes: string[],
   newCount: number,
   reviewDishes: DueDish[] = [],
-  reviewNotes: Record<string, string> = {}
+  reviewNotes: Record<string, string> = {},
+  today?: string
 ): Promise<LLMPlanResult> {
+  const dateStr =
+    today ??
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+  const window = getSolarWindow(dateStr);
   const messages = [
-    { role: 'system', content: buildSystemPrompt() },
+    { role: 'system', content: buildSystemPrompt(window) },
     {
       role: 'user',
-      content: buildPlanUserPrompt(prefs, fridge, recentDishes, newCount, reviewDishes, reviewNotes),
+      content: buildPlanUserPrompt(
+        prefs,
+        fridge,
+        recentDishes,
+        newCount,
+        reviewDishes,
+        reviewNotes,
+        window
+      ),
     },
   ];
 
@@ -313,7 +374,7 @@ export async function generateWeekPlan(
           : new Error('LLM 返回非法 JSON');
     }
   }
-  throw lastError ?? new Error('LLM 多次返回非法 JSON');
+  throw lastError ?? new Error('AI 多次返回无效菜单，请稍后重试');
 }
 
 /**
@@ -322,13 +383,21 @@ export async function generateWeekPlan(
 export async function generateSingleDish(
   prefs: Preferences,
   fridge: FridgeItem[],
-  excludeDishNames: string[]
+  excludeDishNames: string[],
+  today?: string
 ): Promise<Dish> {
+  const dateStr =
+    today ??
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+  const window = getSolarWindow(dateStr);
   const messages = [
-    { role: 'system', content: buildSystemPrompt() },
+    { role: 'system', content: buildSystemPrompt(window) },
     {
       role: 'user',
-      content: buildDishUserPrompt(prefs, fridge, excludeDishNames),
+      content: buildDishUserPrompt(prefs, fridge, excludeDishNames, window),
     },
   ];
 
@@ -355,5 +424,63 @@ export async function generateSingleDish(
           : new Error('LLM 返回非法 JSON');
     }
   }
-  throw lastError ?? new Error('LLM 多次返回非法 JSON');
+  throw lastError ?? new Error('AI 多次返回无效菜品，请稍后重试');
+}
+
+/**
+ * 按改进要点修订做法：菜名身份不变，保留 id 与 solarTerms
+ */
+export async function reviseDish(dish: Dish, notes: string[]): Promise<Dish> {
+  const noteText =
+    notes.length > 0 ? notes.map((n, i) => `${i + 1}. ${n}`).join('\n') : '无';
+  const messages = [
+    {
+      role: 'system',
+      content: [
+        '你是家常菜做法修订助手。根据用户改进要点修订菜谱的用量、步骤、耗时。',
+        '硬约束：菜名与菜品身份不变；不要改成另一道菜；保留合理 JSON schema。',
+        '只返回合法 JSON：{"dish":{...}}，字段与 Dish 一致（含 solarTerms）。不要输出解释。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        `原菜谱 JSON：${JSON.stringify(dish)}`,
+        `改进要点：\n${noteText}`,
+        '请输出修订后的 dish（name 必须与原菜名完全相同；solarTerms 尽量保留）。',
+      ].join('\n\n'),
+    },
+  ];
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    let content: string;
+    try {
+      content = await chat(messages);
+    } catch (e) {
+      throw e instanceof Error ? e : new Error('LLM 调用失败');
+    }
+    try {
+      const parsed = JSON.parse(content) as { dish?: RawDish };
+      if (!parsed?.dish) throw new Error('缺少 dish 字段');
+      const revised = normalizeDish(parsed.dish, dish.id);
+      return {
+        ...revised,
+        id: dish.id,
+        name: dish.name,
+        solarTerms:
+          revised.solarTerms && revised.solarTerms.length > 0
+            ? revised.solarTerms
+            : dish.solarTerms ?? [],
+      };
+    } catch (e) {
+      lastError =
+        e instanceof Error
+          ? new Error(
+              `LLM 返回非法 JSON（第 ${attempt + 1} 次尝试）：${e.message}`
+            )
+          : new Error('LLM 返回非法 JSON');
+    }
+  }
+  throw lastError ?? new Error('AI 多次返回无效修订，请稍后重试');
 }

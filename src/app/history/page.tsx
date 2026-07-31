@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { storage } from '@/lib/storage';
+import { getMastery } from '@/lib/review';
 import type { CookRecord, Mastery, Rating } from '@/lib/types';
 
 interface DishSummary {
@@ -26,17 +27,6 @@ const RATING_EMOJI: Record<Rating, string> = {
   3: '😋',
 };
 
-function calcMastery(records: CookRecord[]): Mastery {
-  // 按日期升序，最后一条为最近
-  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
-  if (sorted.length >= 4) {
-    const last2 = sorted.slice(-2);
-    if (last2.every((r) => r.rating >= 2)) return 'mastered';
-  }
-  if (sorted.length >= 2) return 'familiar';
-  return 'learning';
-}
-
 function aggregate(records: CookRecord[]): DishSummary[] {
   const map = new Map<string, CookRecord[]>();
   for (const r of records) {
@@ -53,7 +43,7 @@ function aggregate(records: CookRecord[]): DishSummary[] {
       dishName: last.dishName,
       count: list.length,
       lastDate: last.date,
-      mastery: calcMastery(list),
+      mastery: getMastery(list),
       lastRating: last.rating,
     });
   }

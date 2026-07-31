@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/components/AppProvider';
 import { BUDGET_LABEL } from '@/lib/constants';
+import { selectLibrarySlots, rankLibraryCandidates } from '@/lib/review';
+import { getSolarWindow, isInSeason } from '@/lib/solar';
 import type { WeekPlan, DayPlan, Dish, FridgeItem, StockLevel, Rating, CookRecord } from '@/lib/types';
 import ShareCard from '@/components/ShareCard';
 
@@ -15,6 +17,11 @@ const RATING_OPTIONS: { value: Rating; label: string; emoji: string }[] = [
 ];
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -29,6 +36,16 @@ function isWeekend(dateStr: string): boolean {
   return d === 0 || d === 6;
 }
 
+/** 从 API 响应取出可读错误，避免非 JSON 导致静默失败 */
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await res.json()) as { error?: string };
+    return data?.error?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function PlanPage() {
   const router = useRouter();
   const {
@@ -39,6 +56,7 @@ export default function PlanPage() {
     weekPlan,
     setWeekPlan,
     cookRecords,
+    dishLibrary,
     recentDishes,
     pushRecentDishes,
     addCookRecord,
@@ -68,6 +86,29 @@ export default function PlanPage() {
     setLoading(true);
     setError(null);
     try {
+      const today = localToday();
+      const window = getSolarWindow(today);
+      const slots = selectLibrarySlots(
+        cookRecords,
+        dishLibrary,
+        today,
+        preferences.cookDaysPerWeek,
+        window
+      );
+
+      const reviewDishes = slots.map((slot) => {
+        const dish = dishLibrary.find((d) => d.id === slot.dishId);
+        if (!dish) return null;
+        const lastNote = cookRecords
+          .filter((cr) => cr.dishId === slot.dishId && cr.notes)
+          .sort((a, b) => b.date.localeCompare(a.date))[0]?.notes;
+        return {
+          ...slot,
+          dish,
+          notes: lastNote,
+        };
+      }).filter(Boolean);
+
       const res = await fetch('/api/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -75,18 +116,20 @@ export default function PlanPage() {
           preferences,
           fridge,
           recentDishes,
+          reviewDishes,
         }),
       });
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error ?? '生成失败');
+        throw new Error(await readApiError(res, '生成失败，请稍后重试'));
       }
-      const plan = data.weekPlan as WeekPlan;
+      const data = (await res.json()) as { weekPlan?: WeekPlan };
+      if (!data.weekPlan) {
+        throw new Error('生成失败：未返回菜单数据');
+      }
+      const plan = data.weekPlan;
       setWeekPlan(plan);
-      // 记录近 2 周吃过的菜名
       const names = Object.values(plan.dishes).map((d) => d.name);
       pushRecentDishes(names);
-      // 将新菜写入菜谱库
       for (const dish of Object.values(plan.dishes)) {
         upsertDish(dish);
       }
@@ -95,7 +138,16 @@ export default function PlanPage() {
     } finally {
       setLoading(false);
     }
-  }, [preferences, fridge, recentDishes, setWeekPlan, pushRecentDishes, upsertDish]);
+  }, [
+    preferences,
+    fridge,
+    recentDishes,
+    cookRecords,
+    dishLibrary,
+    setWeekPlan,
+    pushRecentDishes,
+    upsertDish,
+  ]);
 
   const swapDish = useCallback(
     async (dayIndex: number) => {
@@ -103,9 +155,50 @@ export default function PlanPage() {
       setSwapLoadingIdx(dayIndex);
       setError(null);
       try {
-        const excludeNames = Object.values(weekPlan.dishes).map(
-          (d) => d.name
-        );
+        const day = weekPlan.days[dayIndex];
+
+        // 库内占槽：按节气>到期取下一道，不调 LLM
+        if (day.kind === 'review') {
+          const today = localToday();
+          const window = getSolarWindow(today);
+          const ranked = rankLibraryCandidates(
+            cookRecords,
+            dishLibrary,
+            today,
+            window
+          );
+          const usedIds = new Set(
+            weekPlan.days
+              .map((d) => d.dishId)
+              .filter((id): id is string => !!id)
+          );
+          const next = ranked.find((c) => !usedIds.has(c.dishId));
+          const nextDish = next
+            ? dishLibrary.find((d) => d.id === next.dishId)
+            : null;
+
+          if (nextDish) {
+            const updated: WeekPlan = {
+              ...weekPlan,
+              dishes: { ...weekPlan.dishes, [nextDish.id]: nextDish },
+              days: weekPlan.days.map((d, i) =>
+                i === dayIndex
+                  ? {
+                      ...d,
+                      dishId: nextDish.id,
+                      isTakeout: false,
+                      kind: 'review',
+                    }
+                  : d
+              ),
+            };
+            setWeekPlan(updated);
+            return;
+          }
+          // 无剩余库内候选 → 退化为新课换菜
+        }
+
+        const excludeNames = Object.values(weekPlan.dishes).map((d) => d.name);
         const res = await fetch('/api/dish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -115,17 +208,21 @@ export default function PlanPage() {
             excludeDishNames: excludeNames,
           }),
         });
-        const data = await res.json();
         if (!res.ok) {
-          throw new Error(data?.error ?? '换菜失败');
+          throw new Error(await readApiError(res, '换菜失败，请稍后重试'));
         }
-        const newDish = data.dish as Dish;
-        const day = weekPlan.days[dayIndex];
+        const data = (await res.json()) as { dish?: Dish };
+        if (!data.dish) {
+          throw new Error('换菜失败：未返回菜品数据');
+        }
+        const newDish = data.dish;
         const updated: WeekPlan = {
           ...weekPlan,
           dishes: { ...weekPlan.dishes, [newDish.id]: newDish },
           days: weekPlan.days.map((d, i) =>
-            i === dayIndex ? { ...d, dishId: newDish.id, isTakeout: false } : d
+            i === dayIndex
+              ? { ...d, dishId: newDish.id, isTakeout: false, kind: 'new' }
+              : d
           ),
         };
         setWeekPlan(updated);
@@ -137,7 +234,16 @@ export default function PlanPage() {
         setSwapLoadingIdx(null);
       }
     },
-    [preferences, weekPlan, fridge, setWeekPlan, pushRecentDishes, upsertDish]
+    [
+      preferences,
+      weekPlan,
+      fridge,
+      cookRecords,
+      dishLibrary,
+      setWeekPlan,
+      pushRecentDishes,
+      upsertDish,
+    ]
   );
 
   const toggleTakeout = useCallback(
@@ -169,12 +275,22 @@ export default function PlanPage() {
         low: null, // 用完移除
         expiring: null,
       };
-      const ingredientNames = new Set(
-        dish.ingredients.map((ing) => ing.name.trim().toLowerCase())
+      // 瓶罐调味不扣减；葱姜蒜归蔬菜，仍参与扣减
+      const seasoningNames = new Set(
+        dish.ingredients
+          .filter((ing) => ing.category === '调味')
+          .map((ing) => ing.name.trim().toLowerCase())
       );
-      // usesFridgeItems 也纳入扣减范围
+      const ingredientNames = new Set(
+        dish.ingredients
+          .filter((ing) => ing.category !== '调味')
+          .map((ing) => ing.name.trim().toLowerCase())
+      );
+      // usesFridgeItems 也纳入扣减；若碰巧是调味名则跳过
       for (const name of dish.usesFridgeItems) {
-        ingredientNames.add(name.trim().toLowerCase());
+        const key = name.trim().toLowerCase();
+        if (seasoningNames.has(key)) continue;
+        ingredientNames.add(key);
       }
 
       const newFridge: FridgeItem[] = [];
@@ -381,7 +497,7 @@ export default function PlanPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-semibold text-zinc-900">
                             {dish.name}
                           </h3>
@@ -393,6 +509,11 @@ export default function PlanPage() {
                           {day.kind === 'review' && (
                             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                               复习
+                            </span>
+                          )}
+                          {isInSeason(dish, getSolarWindow(localToday())) && (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                              应季
                             </span>
                           )}
                         </div>
