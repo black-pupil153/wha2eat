@@ -5,7 +5,7 @@
 
 ## 项目一句话
 
-「今晚吃什么」：偏好 + 冰箱库存 → 一周课程表（新菜 + 待复习旧菜）→ 采购清单 → 分享卡片 → 评分与改进笔记回溯。墨墨背单词式复习闭环是核心差异点。外滩黑客松参赛作品，只做到 PRD 规定的范围。
+「今晚吃什么」：打开就是今晚这道菜，一键开做（灶台模式）；背后是 HowToCook 底库规则选菜（急消耗 > 节气 > 复习 > 新菜）+ 一周菜单 + 采购清单 + 评分笔记进化（DeepSeek 按笔记修订做法）。产品初心 = 降低做菜的启动与过程成本；对外叙事仍是墨墨式复习 + 节气应季。外滩黑客松参赛作品，只做到 PRD 规定的范围。
 
 ## 事实源文件
 
@@ -26,12 +26,18 @@
 | 文件 | 职责 | 规则 |
 |------|------|------|
 | `src/lib/types.ts` | 数据模型**唯一定义** | 改类型必须同步检查所有引用；不得在其他文件重复定义 |
-| `src/lib/llm.ts` | LLM 调用 + prompt + 返回校验 | 所有 prompt 修改只在这里；保持重试与 JSON 校验逻辑 |
+| `src/lib/llm.ts` | LLM 调用 + prompt + 返回校验 | 所有 prompt 修改只在这里；保持重试与 JSON 校验逻辑；LLM 只做补位与按笔记修订 |
+| `src/lib/catalog.ts` | 底库规则选菜纯函数 | 只在服务端 API route 使用；打分权重见 PRD §5.2 |
+| `src/data/catalog.json` | HowToCook 精选底库（156 道） | **不手改**，由 `scripts/build-catalog.mjs` 重新生成 |
+| `src/lib/ingredients.ts` | 食材别名归一 + 冰箱匹配/扣减纯函数 | 所有食材名比对必须走 `canonicalFoodName`，不得裸字符串对比 |
 | `src/lib/review.ts` | 复习调度纯函数 | 不掺 UI / storage 逻辑 |
+| `src/lib/solar.ts` | 节气纯函数 | 不掺 UI / storage 逻辑 |
+| `src/lib/shopping.ts` | 采购清单计算纯函数 | 数量加总、别名去重 |
 | `src/lib/storage.ts` | localStorage 读写 | 所有持久化走这里，页面不直接碰 localStorage |
 | `src/lib/constants.ts` | 常量与文案映射 | 新增枚举文案放这里 |
-| `src/components/AppProvider.tsx` | 全局状态 | 跨页共享的状态才进这里 |
-| `src/app/*/page.tsx` | 页面 | 只做展示与交互，业务逻辑下沉到 lib |
+| `src/components/AppProvider.tsx` | 全局状态 + `completeCook`（做过了唯一落库入口） | 跨页共享的状态才进这里 |
+| `src/components/CookDoneModal.tsx` | 「做过了」评分弹窗**唯一入口组件** | 新评分入口一律复用它，不得另写弹窗 |
+| `src/app/*/page.tsx` | 页面 | 只做展示与交互，业务逻辑下沉到 lib；日期一律本地时区，禁用 toISOString 取日期 |
 
 ## 工作规则
 
@@ -48,6 +54,7 @@
 - M1 已完成（骨架 + 菜单生成 + DeepSeek 打通）
 - M2 已完成（采购闭环：shopping 勾选状态保留、换菜/不想做饭联动、fridge 编辑、「做过了」库存扣减、「建议多买」囤货标签）
 - M3 已完成（分享卡片 PNG、?demo=1、移动端 375px、部署 https://wha2eat.vercel.app）
-- **进行中 M4+M6**：复习系统 + 廿四节气应季（节气 > 复习 > 新菜）；按 TASKS.md 执行，PRD v2.2 §8 有验收标准
+- M4+M6 已完成（复习系统 + 廿四节气应季；国内可达部署 http://43.143.48.9:3000）
+- **M7 已完成（8/1 体验重构，PRD v3.0）**：今晚优先 IA、灶台模式、HowToCook 底库规则选菜（秒出）、食材别名归一、CookDoneModal 唯一入口、Onboarding 两步、冰箱常备模板。调度优先级更新为 **急消耗 > 节气 > 复习 > 新菜**（选新菜时）；库内占槽仍是节气 > 复习到期
 - **比赛信息**：外滩黑客松 AI Coding大赛 × Qoder 赛道，作品类型选「Web/H5」，需公网访问链接
 - **小红书**：需持续发布过程笔记（人气奖 100 名，从第一周开始积累曝光）

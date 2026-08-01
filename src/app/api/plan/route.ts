@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateWeekPlan } from '@/lib/llm';
+import { pickCatalogDishes } from '@/lib/catalog';
+import { getSolarWindow } from '@/lib/solar';
 import { checkRateLimit } from '@/lib/ratelimit';
 import type {
   Preferences,
@@ -16,10 +18,15 @@ interface ReviewDishInput extends DueDish {
   notes?: string;
 }
 
+/** 本地时区 YYYY-MM-DD（不用 toISOString，避免 UTC 偏移把"今天"算错） */
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function dateFromIndex(start: Date, dayIndex: number): string {
   const d = new Date(start);
   d.setDate(d.getDate() + dayIndex);
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 function isWeekend(dateStr: string): boolean {
@@ -59,7 +66,6 @@ export async function POST(request: Request) {
     const fridge = (body?.fridge as FridgeItem[] | undefined) ?? [];
     const recentDishes = (body?.recentDishes as string[] | undefined) ?? [];
 
-    // ── 解析复习菜入参 ──
     const rawReviewDishes = (body?.reviewDishes as unknown[] | undefined) ?? [];
     const reviewDishes: ReviewDishInput[] = rawReviewDishes.filter(isValidReviewDish);
 
@@ -80,95 +86,106 @@ export async function POST(request: Request) {
     }
 
     const cookDays = preferences.cookDaysPerWeek;
-    // 复习菜数量不超过做饭天数
     const reviewCount = Math.min(reviewDishes.length, cookDays);
     const newCount = cookDays - reviewCount;
+    const activeReviews = reviewDishes.slice(0, reviewCount);
 
-    // 构建 reviewNotes: dishId → 最新改进要点
-    const reviewNotes: Record<string, string> = {};
-    for (const rd of reviewDishes.slice(0, reviewCount)) {
-      if (rd.notes) {
-        reviewNotes[rd.dishId] = rd.notes;
+    const today = localDate(new Date());
+    const window = getSolarWindow(today);
+
+    // ── 新菜：底库规则选菜为主（秒出、菜谱有底），LLM 只在候选不足时补位 ──
+    const excludeNames = [
+      ...recentDishes,
+      ...activeReviews.map((rd) => rd.dishName),
+    ];
+    let newDishes: Dish[] = pickCatalogDishes({
+      preferences,
+      fridge,
+      excludeNames,
+      count: newCount,
+      window,
+    });
+
+    if (newDishes.length < newCount) {
+      // 底库不够（重忌口等极端情况）→ DeepSeek 补齐缺口
+      const shortfall = newCount - newDishes.length;
+      const reviewNotes: Record<string, string> = {};
+      for (const rd of activeReviews) {
+        if (rd.notes) reviewNotes[rd.dishId] = rd.notes;
+      }
+      const dueDishesForLlm: DueDish[] = activeReviews.map((rd) => ({
+        dishId: rd.dishId,
+        dishName: rd.dishName,
+        overdueDays: rd.overdueDays,
+        lastCookedDate: rd.lastCookedDate,
+        mastery: rd.mastery,
+      }));
+      const llmResult = await generateWeekPlan(
+        preferences,
+        fridge,
+        [...recentDishes, ...newDishes.map((d) => d.name)],
+        shortfall,
+        dueDishesForLlm,
+        reviewNotes,
+        today
+      );
+      newDishes = [...newDishes, ...llmResult.dishes.slice(0, shortfall)];
+    }
+
+    // ── 合并：复习菜占偶数槽，新菜填其余；周末槽优先放耗时长的新菜 ──
+    const allDishes: Record<string, Dish> = {};
+    for (const rd of activeReviews) allDishes[rd.dish.id] = rd.dish;
+    for (const d of newDishes) allDishes[d.id] = d;
+
+    const start = new Date();
+    const slotDates = Array.from({ length: cookDays }, (_, i) =>
+      dateFromIndex(start, i)
+    );
+
+    // 先确定复习槽位（偶数槽），剩余为新菜槽
+    const reviewSlots: number[] = [];
+    const newSlots: number[] = [];
+    let reviewLeft = activeReviews.length;
+    for (let slot = 0; slot < cookDays; slot++) {
+      if (reviewLeft > 0 && slot % 2 === 0) {
+        reviewSlots.push(slot);
+        reviewLeft--;
+      } else {
+        newSlots.push(slot);
       }
     }
 
-    // 截取本轮实际复习菜
-    const activeReviews = reviewDishes.slice(0, reviewCount);
-
-    // ── 调用 LLM 只生成新菜 ──
-    const dueDishesForLlm: DueDish[] = activeReviews.map((rd) => ({
-      dishId: rd.dishId,
-      dishName: rd.dishName,
-      overdueDays: rd.overdueDays,
-      lastCookedDate: rd.lastCookedDate,
-      mastery: rd.mastery,
-    }));
-
-    const result = await generateWeekPlan(
-      preferences,
-      fridge,
-      recentDishes,
-      newCount,
-      dueDishesForLlm,
-      reviewNotes
-    );
-
-    // ── 合并：复习菜 + 新菜按日期交替排入 DayPlan ──
-    const start = new Date();
-    const allDishes: Record<string, Dish> = {};
-
-    // 复习菜快照写入 dishes
-    for (const rd of activeReviews) {
-      allDishes[rd.dish.id] = rd.dish;
+    // 新菜按耗时升序；周末新菜槽从耗时最长的开始分配
+    const sortedNew = [...newDishes].sort((a, b) => a.minutes - b.minutes);
+    const weekendNewSlots = newSlots.filter((s) => isWeekend(slotDates[s]));
+    const weekdayNewSlots = newSlots.filter((s) => !isWeekend(slotDates[s]));
+    const slotToDish = new Map<number, Dish>();
+    for (const s of weekendNewSlots) {
+      const dish = sortedNew.pop();
+      if (dish) slotToDish.set(s, dish);
     }
-    // 新菜写入 dishes
-    for (const d of result.dishes) {
-      allDishes[d.id] = d;
+    for (const s of weekdayNewSlots) {
+      const dish = sortedNew.shift();
+      if (dish) slotToDish.set(s, dish);
     }
 
-    // 新菜按 LLM assignment 排序
-    const newAssignments = [...result.assignments].sort(
-      (a, b) => a.dayIndex - b.dayIndex
-    );
-
-    // 交替排列：偶数槽位(0,2,4…)放复习菜，剩余放新菜
     const days: DayPlan[] = [];
     let reviewIdx = 0;
-    let newIdx = 0;
-
     for (let slot = 0; slot < cookDays; slot++) {
-      const date = dateFromIndex(start, slot);
-
-      if (reviewIdx < activeReviews.length && slot % 2 === 0) {
-        // 复习菜占偶数槽位
-        const rd = activeReviews[reviewIdx];
+      const date = slotDates[slot];
+      if (reviewSlots.includes(slot)) {
         days.push({
           date,
-          dishId: rd.dish.id,
+          dishId: activeReviews[reviewIdx].dish.id,
           isTakeout: false,
           kind: 'review',
         });
         reviewIdx++;
-      } else if (newIdx < newAssignments.length) {
-        // 新菜填充剩余槽位
-        const a = newAssignments[newIdx];
-        days.push({
-          date,
-          dishId: a.dishId,
-          isTakeout: false,
-          kind: 'new',
-        });
-        newIdx++;
-      } else if (reviewIdx < activeReviews.length) {
-        // 新菜用完了，剩余复习菜继续填入
-        const rd = activeReviews[reviewIdx];
-        days.push({
-          date,
-          dishId: rd.dish.id,
-          isTakeout: false,
-          kind: 'review',
-        });
-        reviewIdx++;
+      } else {
+        const dish = slotToDish.get(slot);
+        if (dish) {
+          days.push({ date, dishId: dish.id, isTakeout: false, kind: 'new' });
+        }
       }
     }
 
@@ -182,7 +199,6 @@ export async function POST(request: Request) {
       dishes: allDishes,
     };
 
-    // 附带周末标记便于前端展示
     const weekendFlags = days.map((d) => isWeekend(d.date));
 
     return NextResponse.json({ weekPlan, weekendFlags });

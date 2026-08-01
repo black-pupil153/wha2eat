@@ -16,9 +16,11 @@ import type {
   ShoppingItem,
   CookRecord,
   Dish,
+  Rating,
 } from '@/lib/types';
 import { storage } from '@/lib/storage';
 import { computeShopping, mergeShoppingList } from '@/lib/shopping';
+import { deductFridge } from '@/lib/ingredients';
 
 interface AppContextValue {
   ready: boolean;
@@ -36,6 +38,13 @@ interface AppContextValue {
   setDishLibrary: (dishes: Dish[]) => void;
   addCookRecord: (record: CookRecord) => void;
   upsertDish: (dish: Dish) => void;
+  /** 「做过了」全流程唯一入口：写 CookRecord + 库存扣减 + 标记当天已做；成功返回 true */
+  completeCook: (input: {
+    dishId: string;
+    date: string;
+    rating: Rating;
+    notes?: string;
+  }) => boolean;
   recentDishes: string[];
   pushRecentDishes: (names: string[]) => void;
 }
@@ -147,6 +156,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // 「做过了」唯一入口：评分/笔记落 CookRecord，库存降档，当天 isCooked 置 true
+  const completeCook = useCallback(
+    (input: { dishId: string; date: string; rating: Rating; notes?: string }): boolean => {
+      const plan = weekPlanRef.current;
+      const dish =
+        plan?.dishes[input.dishId] ??
+        storage.getDishLibrary().find((d) => d.id === input.dishId) ??
+        null;
+      if (!dish) return false;
+
+      const record: CookRecord = {
+        id: `cr-${Date.now()}`,
+        dishId: dish.id,
+        dishName: dish.name,
+        date: input.date,
+        rating: input.rating,
+        notes: input.notes?.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      };
+      storage.addCookRecord(record);
+      setCookRecordsState((prev) => [...prev, record]);
+
+      // 库存扣减（别名匹配，瓶罐调味跳过）
+      const nextFridge = deductFridge(fridgeRef.current, dish);
+      storage.setFridge(nextFridge);
+      fridgeRef.current = nextFridge;
+      setFridgeState(nextFridge);
+
+      // 标记当天已做
+      if (plan) {
+        const updated: WeekPlan = {
+          ...plan,
+          days: plan.days.map((d) =>
+            d.date === input.date && d.dishId === input.dishId
+              ? { ...d, isCooked: true }
+              : d
+          ),
+        };
+        storage.setWeekPlan(updated);
+        weekPlanRef.current = updated;
+        setWeekPlanState(updated);
+        syncShoppingFrom(nextFridge, updated);
+      } else {
+        syncShoppingFrom(nextFridge, null);
+      }
+      return true;
+    },
+    [syncShoppingFrom]
+  );
+
   const pushRecentDishes = useCallback(
     (names: string[]) => {
       const merged = [...recentDishes, ...names];
@@ -173,6 +232,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDishLibrary,
     addCookRecord,
     upsertDish,
+    completeCook,
     recentDishes,
     pushRecentDishes,
   };

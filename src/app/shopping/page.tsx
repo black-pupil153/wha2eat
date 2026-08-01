@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/components/AppProvider';
 import { INGREDIENT_CATEGORIES } from '@/lib/constants';
-import { computeShopping, mergeShoppingList } from '@/lib/shopping';
+import { sameFood } from '@/lib/ingredients';
+import {
+  computeShopping,
+  mergeShoppingList,
+  shoppingItemKey,
+} from '@/lib/shopping';
 import type { FridgeItem } from '@/lib/types';
 
 function newFridgeId(): string {
@@ -16,7 +21,7 @@ function newFridgeId(): string {
 export default function ShoppingPage() {
   const { ready, weekPlan, fridge, shopping, setShopping, setFridge } = useApp();
 
-  // 记录用户手动删除的食材 key（name__category），防止 useEffect 重新加回
+  // 删除 tombstone：与 mergeShoppingList 同一套 shoppingItemKey（别名归一）
   const deletedKeysRef = useRef<Set<string>>(new Set());
 
   const computed = useMemo(() => {
@@ -24,11 +29,11 @@ export default function ShoppingPage() {
     return computeShopping(weekPlan, fridge);
   }, [weekPlan, fridge]);
 
-  // 过滤手动删除项，并与 AppProvider 同步结果对齐
+  // 过滤手动删除项；AppProvider.setFridge 重算后仍靠此 tombstone 挡住加回
   useEffect(() => {
     if (!ready) return;
     const filtered = computed.filter(
-      (c) => !deletedKeysRef.current.has(`${c.name}__${c.category}`)
+      (c) => !deletedKeysRef.current.has(shoppingItemKey(c.name, c.category))
     );
     const merged = mergeShoppingList(filtered, shopping);
     if (merged !== shopping) {
@@ -37,17 +42,14 @@ export default function ShoppingPage() {
   }, [ready, computed, shopping, setShopping]);
 
   // 勾选「已买」→ 写入冰箱（setFridge 会重算待购并移出该项）
-  // 取消勾选且仍在清单 → 移出冰箱（重算后回到待购）
+  // 取消勾选且仍在清单 → 移出冰箱（重算后回到待购）；查找走 sameFood
   const toggleChecked = (idx: number) => {
     const item = shopping[idx];
     if (!item) return;
     const nextChecked = !item.checked;
-    const nameKey = item.name.trim().toLowerCase();
 
     if (nextChecked) {
-      const exists = fridge.some(
-        (f) => f.name.trim().toLowerCase() === nameKey
-      );
+      const exists = fridge.some((f) => sameFood(f.name, item.name));
       if (!exists) {
         const fridgeItem: FridgeItem = {
           id: newFridgeId(),
@@ -59,9 +61,7 @@ export default function ShoppingPage() {
         setShopping(shopping.filter((_, i) => i !== idx));
       }
     } else {
-      const removeAt = fridge.findIndex(
-        (f) => f.name.trim().toLowerCase() === nameKey
-      );
+      const removeAt = fridge.findIndex((f) => sameFood(f.name, item.name));
       if (removeAt >= 0) {
         setFridge(fridge.filter((_, i) => i !== removeAt));
       } else {
@@ -78,7 +78,9 @@ export default function ShoppingPage() {
     (idx: number) => {
       const removed = shopping[idx];
       if (removed) {
-        deletedKeysRef.current.add(`${removed.name}__${removed.category}`);
+        deletedKeysRef.current.add(
+          shoppingItemKey(removed.name, removed.category)
+        );
       }
       setShopping(shopping.filter((_, i) => i !== idx));
     },

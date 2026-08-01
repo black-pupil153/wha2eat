@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { storage } from '@/lib/storage';
+import { useApp } from '@/components/AppProvider';
 import { getMastery } from '@/lib/review';
 import type { CookRecord, Mastery, Rating } from '@/lib/types';
 
@@ -57,8 +57,16 @@ function formatDate(dateStr: string): string {
 }
 
 export default function HistoryPage() {
-  const records = storage.getCookRecords();
+  const { ready, cookRecords: records } = useApp();
   const summaries = useMemo(() => aggregate(records), [records]);
+
+  if (!ready) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-20">
+        <div className="animate-pulse text-zinc-400">加载中…</div>
+      </div>
+    );
+  }
 
   const totalDishes = summaries.length;
   const masteredCount = summaries.filter((s) => s.mastery === 'mastered').length;

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { STOCK_LEVEL_OPTIONS, STOCK_LEVEL_LABEL } from '@/lib/constants';
+import { sameFood } from '@/lib/ingredients';
 import type { FridgeItem, StockLevel } from '@/lib/types';
 
 export default function FridgePage() {
@@ -23,9 +24,17 @@ export default function FridgePage() {
     );
   }
 
+  const hasFood = (list: FridgeItem[], candidate: string) =>
+    list.some((f) => sameFood(f.name, candidate));
+
   const addItem = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    // 别名去重：已有「番茄」时不再加「西红柿」
+    if (hasFood(fridge, trimmed)) {
+      setName('');
+      return;
+    }
     const item: FridgeItem = {
       id:
         typeof crypto !== 'undefined' && crypto.randomUUID
@@ -45,21 +54,52 @@ export default function FridgePage() {
       .map((s) => s.trim())
       .filter(Boolean);
     if (names.length === 0) return;
-    const existing = new Set(fridge.map((f) => f.name));
-    const newItems: FridgeItem[] = names
-      .filter((n) => !existing.has(n))
-      .map((n) => ({
+    const next = [...fridge];
+    const newItems: FridgeItem[] = [];
+    for (const n of names) {
+      if (hasFood(next, n)) continue;
+      const item: FridgeItem = {
         id:
           typeof crypto !== 'undefined' && crypto.randomUUID
             ? crypto.randomUUID()
             : `f-${Date.now()}-${n}`,
         name: n,
         level: bulkLevel,
-      }));
+      };
+      newItems.push(item);
+      next.push(item);
+    }
     if (newItems.length > 0) {
-      setFridge([...fridge, ...newItems]);
+      setFridge(next);
     }
     setBulkText('');
+  };
+
+  // 两人家庭常备食材一键填入（别名去重）
+  const STARTER_ITEMS = [
+    '鸡蛋', '西红柿', '土豆', '洋葱', '大蒜', '生姜',
+    '小葱', '大米', '面条', '胡萝卜', '青椒', '豆腐',
+  ];
+
+  const addStarter = () => {
+    const next = [...fridge];
+    const newItems: FridgeItem[] = [];
+    for (const n of STARTER_ITEMS) {
+      if (hasFood(next, n)) continue;
+      const item: FridgeItem = {
+        id:
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `f-${Date.now()}-${n}`,
+        name: n,
+        level: 'some' as StockLevel,
+      };
+      newItems.push(item);
+      next.push(item);
+    }
+    if (newItems.length > 0) {
+      setFridge(next);
+    }
   };
 
   const removeItem = (id: string) => {
@@ -185,7 +225,17 @@ export default function FridgePage() {
       {fridge.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
           <div className="mb-2 text-4xl">🧊</div>
-          <p className="text-sm text-zinc-400">冰箱还是空的，添加点食材吧</p>
+          <p className="text-sm text-zinc-400">冰箱还是空的（不填也能生成菜单）</p>
+          <button
+            type="button"
+            onClick={addStarter}
+            className="btn btn-primary mt-4"
+          >
+            一键填入两人常备食材
+          </button>
+          <p className="mt-2 text-xs text-zinc-400">
+            {STARTER_ITEMS.join('、')}
+          </p>
         </div>
       ) : (
         <ul className="space-y-2">

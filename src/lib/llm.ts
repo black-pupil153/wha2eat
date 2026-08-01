@@ -58,6 +58,7 @@ function buildSystemPrompt(window?: SolarWindow): string {
     '5. 不与近期吃过的菜名重复；一周内部菜品类型错开（荤素/口味/烹饪方式）。',
     '6. 工作日耗时 ≤ 30 分钟，周末可放宽至 60 分钟。',
     '7. 食材用量需按就餐人数换算。',
+    '8. steps 必须可照做：第一步是备菜汇总（切配/腌制/焯水），后续每步写清具体动作 + 火候 + 时长（如"中火煸炒 2 分钟至断生"），共 5-10 步；关键处给出判断标准（如"筷子能轻松插入"）。',
     solarLine,
     '',
     '只返回合法 JSON，不要输出任何解释、Markdown 或多余文字。JSON 结构如下：',
@@ -161,7 +162,7 @@ function buildDishUserPrompt(
     `冰箱库存：${fridgeText}`,
     `需要排除的菜名：${excludeDishNames.length ? excludeDishNames.join('、') : '无'}`,
     '',
-    '请推荐 1 道符合约束的应季家常菜（工作日 ≤ 30 分钟），返回 JSON：',
+    '请推荐 1 道符合约束的应季家常菜（工作日 ≤ 30 分钟）。steps 第一步为备菜汇总，每步含火候/时长，共 5-10 步。返回 JSON：',
     '{"dish":{"id":"d-new","name":"...","description":"...","minutes":25,"costLevel":"low","ingredients":[{"name":"...","amount":"...","category":"蔬菜"}],"steps":["..."],"usesFridgeItems":["..."],"solarTerms":["大暑"]}}',
   ].join('\n');
 }
@@ -254,6 +255,13 @@ function validatePlan(raw: RawPlan): LLMPlanResult {
     dishMap.set(dish.id, dish);
     return dish;
   });
+  for (const dish of dishes) {
+    if (dish.steps.length < 5 || dish.steps.length > 10) {
+      throw new Error(
+        `菜品「${dish.name}」steps 数量须在 5–10 之间，当前 ${dish.steps.length}`
+      );
+    }
+  }
   const assignments: LLMAssignment[] = raw.assignments
     .map((a) => ({
       dayIndex: typeof a.dayIndex === 'number' ? a.dayIndex : -1,
@@ -306,8 +314,8 @@ async function chat(messages: { role: string; content: string }[]): Promise<stri
   clearTimeout(timeoutId);
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`DeepSeek 接口错误（${res.status}）：${text.slice(0, 200) || '请稍后重试'}`);
+    const hint = res.status === 401 ? '，请检查 API key' : '，请稍后重试';
+    throw new Error(`DeepSeek 接口错误（${res.status}）${hint}`);
   }
   const data = await res.json();
   const content: string =
@@ -439,6 +447,7 @@ export async function reviseDish(dish: Dish, notes: string[]): Promise<Dish> {
       content: [
         '你是家常菜做法修订助手。根据用户改进要点修订菜谱的用量、步骤、耗时。',
         '硬约束：菜名与菜品身份不变；不要改成另一道菜；保留合理 JSON schema。',
+        '修订后的 steps 保持可照做：第一步为备菜汇总，每步含具体动作与火候/时长。',
         '只返回合法 JSON：{"dish":{...}}，字段与 Dish 一致（含 solarTerms）。不要输出解释。',
       ].join('\n'),
     },

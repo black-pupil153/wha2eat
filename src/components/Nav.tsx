@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useApp } from '@/components/AppProvider';
 
 const NAV_ITEMS = [
-  { href: '/plan', label: '菜单' },
+  { href: '/plan', label: '今晚' },
   { href: '/fridge', label: '冰箱' },
   { href: '/shopping', label: '采购' },
   { href: '/history', label: '回溯' },

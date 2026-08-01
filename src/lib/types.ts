@@ -35,6 +35,10 @@ export interface Dish {
   usesFridgeItems: string[]; // 命中的库存食材名
   /** 所属廿四节气；旧数据缺省视为 [] */
   solarTerms?: SolarTerm[];
+  /** 菜谱原始份量（人份）；缺省视为 2，用于按人数换算 */
+  baseServings?: number;
+  /** 菜谱来源：howtocook 底库 / ai 生成；缺省视为 ai（旧数据） */
+  source?: 'howtocook' | 'ai';
 }
 
 /** 廿四节气 */

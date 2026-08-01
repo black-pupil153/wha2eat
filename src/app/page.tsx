@@ -115,37 +115,29 @@ function makeDemoCookRecords(): CookRecord[] {
   ];
 }
 
-// ── 演示一周课程表（5 新课 + 2 复习）──
+// ── 演示一周课程表（从今天开始：今晚 = 带踩雷笔记的复习菜，演示「上次你说」）──
 function makeDemoWeekPlan(): WeekPlan {
-  const today = new Date();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - today.getDay() + 1);
-
   const library = makeDemoDishLibrary();
   const dishes: Record<string, Dish> = {};
   library.forEach((d) => { dishes[d.id] = d; });
 
-  // 周一到周日：5 新课 + 2 复习 + 2 休息
   const schedule: { dayOffset: number; dishId: string | null; kind?: 'new' | 'review'; takeout: boolean }[] = [
-    { dayOffset: 0, dishId: 'dish-n1', kind: 'new', takeout: false },     // 周一：清蒸鲈鱼（新课）
-    { dayOffset: 1, dishId: 'dish-11', kind: 'review', takeout: false },   // 周二：凉拌苦瓜（应季库内）
-    { dayOffset: 2, dishId: 'dish-n2', kind: 'new', takeout: false },     // 周三：蒜蓉菠菜（新课）
-    { dayOffset: 3, dishId: 'dish-n3', kind: 'new', takeout: false },     // 周四：蛋炒饭（新课）
-    { dayOffset: 4, dishId: 'dish-07', kind: 'review', takeout: false },   // 周五：宫保鸡丁（复习）
-    { dayOffset: 5, dishId: null, takeout: true },                         // 周六：休息
-    { dayOffset: 6, dishId: null, takeout: true },                         // 周日：休息
+    { dayOffset: 0, dishId: 'dish-07', kind: 'review', takeout: false },  // 今晚：宫保鸡丁（复习，带踩雷笔记）
+    { dayOffset: 1, dishId: 'dish-n1', kind: 'new', takeout: false },     // 明天：清蒸鲈鱼（新菜，应季）
+    { dayOffset: 2, dishId: 'dish-11', kind: 'review', takeout: false },  // 后天：凉拌苦瓜（应季库内）
+    { dayOffset: 3, dishId: 'dish-n3', kind: 'new', takeout: false },     // 蛋炒饭（新菜）
+    { dayOffset: 4, dishId: 'dish-n2', kind: 'new', takeout: false },     // 蒜蓉菠菜（新菜）
+    { dayOffset: 5, dishId: null, takeout: true },                        // 休息
+    { dayOffset: 6, dishId: null, takeout: true },                        // 休息
   ];
 
-  const days: DayPlan[] = schedule.map((s) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + s.dayOffset);
-    return {
-      date: d.toISOString().split('T')[0],
-      dishId: s.dishId,
-      isTakeout: s.takeout,
-      kind: s.kind,
-    };
-  });
+  const days: DayPlan[] = schedule.map((s) => ({
+    // 用本地日期而非 toISOString，避免 UTC 偏移把"今天"算错
+    date: daysAgo(-s.dayOffset),
+    dishId: s.dishId,
+    isTakeout: s.takeout,
+    kind: s.kind,
+  }));
 
   return {
     id: 'demo-week-' + Date.now(),

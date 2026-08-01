@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/components/AppProvider';
 import { BUDGET_LABEL } from '@/lib/constants';
 import { getSolarWindow, isInSeason } from '@/lib/solar';
-import type { Dish, CookRecord, Rating, WeekPlan } from '@/lib/types';
+import type { Dish, Rating, WeekPlan } from '@/lib/types';
+import CookDoneModal from '@/components/CookDoneModal';
 
 const RATING_LABEL: Record<Rating, string> = {
   1: '😖 踩雷',
@@ -19,9 +20,10 @@ function localToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function DishDetailPage() {
+function DishDetailInner() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     ready,
     weekPlan,
@@ -38,6 +40,12 @@ export default function DishDetailPage() {
     id: string;
     dish: Dish;
   } | null>(null);
+
+  // ── 灶台模式（开做态）──
+  const [cooking, setCooking] = useState(searchParams.get('cook') === '1');
+  const [prepDone, setPrepDone] = useState<Set<number>>(new Set());
+  const [stepsDone, setStepsDone] = useState<Set<number>>(new Set());
+  const [showDoneModal, setShowDoneModal] = useState(false);
 
   if (!ready) {
     return (
@@ -66,13 +74,19 @@ export default function DishDetailPage() {
   const lastNote = historyNotes[0]?.notes;
   const solarWindow = getSolarWindow(localToday());
 
+  // 做菜记录归属日期：优先本周计划里排这道菜且未做的那天，否则今天
+  const planDay = weekPlan?.days.find(
+    (d) => d.dishId === id && !d.isCooked && !d.isTakeout
+  );
+  const recordDate = planDay?.date ?? localToday();
+
   const handleRevise = async () => {
     if (!dish) return;
     const notes = historyNotes
       .map((r) => r.notes)
       .filter((n): n is string => !!n && !!n.trim());
     if (notes.length === 0) {
-      setError('还没有改进要点，先在菜单页「做过了」里记一条吧');
+      setError('还没有改进要点，先在「做过了」里记一条吧');
       return;
     }
     setRevising(true);
@@ -119,6 +133,154 @@ export default function DishDetailPage() {
     );
   }
 
+  const toggleSet = (
+    set: Set<number>,
+    setter: (s: Set<number>) => void,
+    i: number
+  ) => {
+    const next = new Set(set);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
+    setter(next);
+  };
+
+  // ── 灶台模式视图 ──
+  if (cooking) {
+    const currentStep = dish.steps.findIndex((_, i) => !stepsDone.has(i));
+    return (
+      <div className="mx-auto max-w-3xl px-3 py-4 pb-28 sm:px-4">
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setCooking(false)}
+            className="text-sm text-zinc-500 hover:text-zinc-800"
+          >
+            ‹ 退出灶台模式
+          </button>
+          <span className="text-xs text-zinc-400">⏱ 约 {dish.minutes} 分钟</span>
+        </div>
+
+        <h1 className="text-2xl font-bold text-zinc-900">{dish.name}</h1>
+
+        {lastNote && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            💡 上次你说：{lastNote}
+          </div>
+        )}
+
+        {/* 备菜清单 */}
+        <section className="mt-5">
+          <h2 className="mb-2 text-base font-semibold text-zinc-800">
+            🧺 备菜清单
+            <span className="ml-2 text-xs font-normal text-zinc-400">
+              {prepDone.size}/{dish.ingredients.length}
+            </span>
+          </h2>
+          <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {dish.ingredients.map((ing, i) => (
+              <li key={`${ing.name}-${i}`}>
+                <button
+                  type="button"
+                  onClick={() => toggleSet(prepDone, setPrepDone, i)}
+                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${
+                    prepDone.has(i)
+                      ? 'border-emerald-200 bg-emerald-50 text-zinc-400 line-through'
+                      : 'border-zinc-200 bg-white text-zinc-800'
+                  }`}
+                >
+                  <span>
+                    {prepDone.has(i) ? '✓ ' : ''}
+                    {ing.name}
+                  </span>
+                  <span className="text-xs text-zinc-400">{ing.amount}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* 分步做法（点一步完成一步） */}
+        <section className="mt-6">
+          <h2 className="mb-2 text-base font-semibold text-zinc-800">
+            🔥 跟着做
+            <span className="ml-2 text-xs font-normal text-zinc-400">
+              {stepsDone.size}/{dish.steps.length} 步
+            </span>
+          </h2>
+          <ol className="space-y-2">
+            {dish.steps.map((step, i) => {
+              const done = stepsDone.has(i);
+              const isCurrent = i === currentStep;
+              return (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => toggleSet(stepsDone, setStepsDone, i)}
+                    className={`flex w-full gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                      done
+                        ? 'border-emerald-200 bg-emerald-50/60'
+                        : isCurrent
+                          ? 'border-emerald-500 bg-white shadow-sm ring-1 ring-emerald-500/30'
+                          : 'border-zinc-200 bg-white'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-6 w-6 flex-none items-center justify-center rounded-full text-xs font-bold ${
+                        done
+                          ? 'bg-emerald-600 text-white'
+                          : isCurrent
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-zinc-100 text-zinc-500'
+                      }`}
+                    >
+                      {done ? '✓' : i + 1}
+                    </span>
+                    <p
+                      className={`pt-0.5 text-sm leading-relaxed ${
+                        done ? 'text-zinc-400 line-through' : 'text-zinc-700'
+                      }`}
+                    >
+                      {step}
+                    </p>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {/* 底部固定：做完收尾 */}
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur">
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            <span className="text-xs text-zinc-400">
+              {stepsDone.size === dish.steps.length
+                ? '全部完成 🎉'
+                : `进行到第 ${Math.max(currentStep + 1, 1)} 步`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowDoneModal(true)}
+              className="btn btn-primary flex-1 text-base font-bold"
+            >
+              做完了，打个分
+            </button>
+          </div>
+        </div>
+
+        {showDoneModal && (
+          <CookDoneModal
+            dishId={dish.id}
+            dishName={dish.name}
+            date={recordDate}
+            onClose={() => setShowDoneModal(false)}
+            onDone={() => router.push('/plan')}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── 档案视图 ──
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       <button
@@ -164,6 +326,11 @@ export default function DishDetailPage() {
               👥 {preferences.servings} 人份
             </span>
           )}
+          {dish.source === 'howtocook' && (
+            <span className="rounded-full bg-zinc-100 px-3 py-1">
+              📖 菜谱来自 HowToCook
+            </span>
+          )}
           {(dish.solarTerms ?? []).map((t) => (
             <span
               key={t}
@@ -179,6 +346,16 @@ export default function DishDetailPage() {
             优先消耗库存：{dish.usesFridgeItems.join('、')}
           </div>
         )}
+
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => setCooking(true)}
+            className="btn btn-primary w-full text-base font-bold"
+          >
+            🔥 开始做这道菜
+          </button>
+        </div>
 
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold">食材用量</h2>
@@ -261,5 +438,19 @@ export default function DishDetailPage() {
         </section>
       )}
     </div>
+  );
+}
+
+export default function DishDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center py-20">
+          <div className="animate-pulse text-zinc-400">加载中…</div>
+        </div>
+      }
+    >
+      <DishDetailInner />
+    </Suspense>
   );
 }

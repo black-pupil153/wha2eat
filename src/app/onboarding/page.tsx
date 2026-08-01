@@ -44,6 +44,7 @@ export default function OnboardingPage() {
   const [tastes, setTastes] = useState<string[]>([]);
   const [cookDaysPerWeek, setCookDaysPerWeek] = useState(5);
   const [budget, setBudget] = useState<Budget>('mid');
+  const [showMore, setShowMore] = useState(false);
 
   // 从已保存的偏好恢复（编辑场景）
   useEffect(() => {
@@ -95,9 +96,13 @@ export default function OnboardingPage() {
   return (
     <div className="mx-auto max-w-3xl px-3 py-6 sm:px-4 sm:py-8">
       <header className="mb-6">
-        <h1 className="text-xl font-bold sm:text-2xl">偏好设置</h1>
+        <h1 className="text-xl font-bold sm:text-2xl">
+          {preferences ? '偏好设置' : '两步开吃'}
+        </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          填写后保存到本地，刷新不丢。之后可在「设置」页修改。
+          {preferences
+            ? '数据保存在本地，刷新不丢。'
+            : '告诉我几个人吃、忌什么口，其余都有默认值，之后随时能改。'}
         </p>
       </header>
 
@@ -146,64 +151,87 @@ export default function OnboardingPage() {
           />
         </div>
 
-        {/* 口味偏好 */}
+        {/* 更多偏好（可选，默认折叠降低启动门槛） */}
         <div>
-          <label className="mb-2 block text-sm font-medium">口味偏好</label>
-          <div className="flex flex-wrap gap-2">
-            {TASTE_OPTIONS.map((opt) => (
-              <TagOption
-                key={opt}
-                label={opt}
-                active={tastes.includes(opt)}
-                onClick={() => toggle(tastes, setTastes, opt)}
-              />
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            className="flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-700"
+          >
+            更多偏好（口味 / 天数 / 预算，可不填）
+            <span className="text-xs">{showMore ? '▾' : '▸'}</span>
+          </button>
+          {!showMore && (
+            <p className="mt-1 text-xs text-zinc-400">
+              当前：每周 {cookDaysPerWeek} 天 ·{' '}
+              {tastes.length ? tastes.join('、') : '口味不限'} ·{' '}
+              {BUDGET_OPTIONS.find((b) => b.value === budget)?.label}预算
+            </p>
+          )}
         </div>
 
-        {/* 每周做饭天数 */}
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            每周做饭天数
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={3}
-              max={7}
-              value={cookDaysPerWeek}
-              onChange={(e) => setCookDaysPerWeek(Number(e.target.value))}
-              className="flex-1 accent-emerald-600"
-            />
-            <span className="w-12 text-center text-lg font-bold text-emerald-600">
-              {cookDaysPerWeek}
-            </span>
-          </div>
-        </div>
+        {showMore && (
+          <>
+            {/* 口味偏好 */}
+            <div>
+              <label className="mb-2 block text-sm font-medium">口味偏好</label>
+              <div className="flex flex-wrap gap-2">
+                {TASTE_OPTIONS.map((opt) => (
+                  <TagOption
+                    key={opt}
+                    label={opt}
+                    active={tastes.includes(opt)}
+                    onClick={() => toggle(tastes, setTastes, opt)}
+                  />
+                ))}
+              </div>
+            </div>
 
-        {/* 预算 */}
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            单餐预算档
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {BUDGET_OPTIONS.map((opt) => (
-              <TagOption
-                key={opt.value}
-                label={opt.label}
-                active={budget === opt.value}
-                onClick={() => setBudget(opt.value)}
-              />
-            ))}
-          </div>
-        </div>
+            {/* 每周做饭天数 */}
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                每周做饭天数
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={3}
+                  max={7}
+                  value={cookDaysPerWeek}
+                  onChange={(e) => setCookDaysPerWeek(Number(e.target.value))}
+                  className="flex-1 accent-emerald-600"
+                />
+                <span className="w-12 text-center text-lg font-bold text-emerald-600">
+                  {cookDaysPerWeek}
+                </span>
+              </div>
+            </div>
+
+            {/* 预算 */}
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                单餐预算档
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {BUDGET_OPTIONS.map((opt) => (
+                  <TagOption
+                    key={opt.value}
+                    label={opt.label}
+                    active={budget === opt.value}
+                    onClick={() => setBudget(opt.value)}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         <button
           type="button"
           onClick={handleSave}
-          className="btn btn-primary w-full"
+          className="btn btn-primary w-full text-base font-bold"
         >
-          保存并开始规划
+          {preferences ? '保存' : '开始安排今晚 →'}
         </button>
       </div>
     </div>
