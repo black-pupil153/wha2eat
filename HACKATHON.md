@@ -10,7 +10,7 @@
    - → **主线：用 Cursor agent window 续作本地项目**（用户熟悉、无赛道额度概念），按 TASKS.md v3 继续 T12–T19；完成后仍走 Qoder 赛道问卷提交（作品 70% 由 Qoder 完成，混合工具有明文支持）
    - → **备用：扣子编程**——九家中唯一能导入已有仓库（GitHub/zip）续作的平台，支持环境变量（DeepSeek key）、托管+GitHub 同步，字节托管**天然国内可达**（同时解决阻塞 2）
    - → 排除：WeaveFox/QMuse/秒哒/灵光/吐司（no-code 从零生成，不能导入代码）；小浣熊（Copilot 型插件，无全自主 agent，额度不透明 20 次/天）；百炼（模型编排平台）
-2. **【高】国内可达性**：wha2eat.vercel.app 国内不可达。方案排序：a) 扣子编程托管（与备用开发线合并解决）；b) 自有域名；c) 国内云平台静态/Node 托管（腾讯云 EdgeOne Pages、CloudBase 等）。**8/3 前必须上线**。
+2. **【已解决 7/31】国内可达性**：腾讯云轻量服务器（43.143.48.9:3000，上海）standalone 部署上线，systemd 托管、防火墙仅开 22+3000、API 按 IP 限流 10 次/分。赛后待办：删除防火墙 3000 规则、停用 wha2eat.service、清理 ~/wha2eat 与 ~/wha2eat.env。
 3. **【已确认】比赛提交窗口 7/20–8/9**（多源一致；具体时刻未公布，按 8/8 完成提交打提前量）。内部包装死线维持 8/5。
 4. **【已解决】git 快照已建**：7/29 本地 git init + 首次提交（commit 88d53ab，Qoder 额度耗尽现场保护）。
 5. **待办提醒**：问卷草稿作品名称"今天吃什么"须改为「今晚吃什么」，并检查草稿字段疑似串行。
@@ -98,3 +98,4 @@
 - 2026-07-29：调味过滤提前进提交前——`computeShopping` 跳过 category===调味；`markCooked` 扣减跳过调味（含 usesFridgeItems 同名调味）。精确到克仍赛后。PRD §3.5 / HACKATHON §0 已更新。`pnpm build` 通过。遗留：等验收。
 - 2026-07-29：澄清调味边界——葱姜蒜归蔬菜（demo + LLM 约定）；瓶罐调味仍跳过采购/扣减。PRD §3.5 已补。`pnpm build` 通过。遗留：等验收。
 - 2026-07-31：lint 清零——cursor-agent 修掉 3 个 error（AppProvider 渲染期写 ref 移入 useEffect；dish 页 effect 内 setState 改为 Context 派生 + revisedOverride），独立复验 `pnpm lint` 0 error（2 warning 保留）、build 绿。T19 服务端 smoke 通过：全部页面路由 200；POST /api/plan 校验 400 正常、真实 LLM 调用复习菜占偶数槽 kind='review'、新菜带正确节气（大暑）；POST /api/dish/revise 按"盐减半"修订成功且 id 保留。遗留：?demo=1 复习链路 UI 走查与 ShareCard 导出需浏览器人工过一遍；国内可达部署方案已定为腾讯云轻量服务器（等 SSH 信息 + 端口放行）。
+- 2026-07-31：**国内可达上线**——next.config 改 standalone + 新增 `lib/ratelimit.ts`（按 IP 10 次/分）接入两个 API 路由；腾讯云轻量服务器（43.143.48.9）systemd 服务 wha2eat 运行中，防火墙 22+3000，env 文件独立于部署目录（~/wha2eat.env）。外部验证：全页面 200，限流第 11 次 429。README `__PROD_URL__` 已替换为 http://43.143.48.9:3000。遗留：浏览器人工走查 demo 链路；赛后清理服务器（见 §0）。

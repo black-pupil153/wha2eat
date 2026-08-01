@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateWeekPlan } from '@/lib/llm';
+import { checkRateLimit } from '@/lib/ratelimit';
 import type {
   Preferences,
   FridgeItem,
@@ -43,6 +44,15 @@ function isValidReviewDish(r: unknown): r is ReviewDishInput {
 }
 
 export async function POST(request: Request) {
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: '请求太频繁，请稍后再试' },
+      { status: 429 }
+    );
+  }
+
   try {
     const body = await request.json();
     const preferences = body?.preferences as Preferences | undefined;
