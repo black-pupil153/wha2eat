@@ -10,7 +10,6 @@
   <img src="https://img.shields.io/badge/Next.js-App%20Router-black?logo=next.js" alt="Next.js" />
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/DeepSeek-deepseek--chat-0066FF" alt="DeepSeek" />
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT" />
 </p>
 
 ## 线上体验
