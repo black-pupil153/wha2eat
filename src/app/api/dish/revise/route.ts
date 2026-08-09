@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { reviseDish } from '@/lib/llm';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getClientIp } from '@/lib/client-ip';
+import { clientErrorMessage } from '@/lib/api-error';
 import type { Dish } from '@/lib/types';
 
 export async function POST(request: Request) {
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const ip = getClientIp(request);
   if (!checkRateLimit(ip)) {
     return NextResponse.json(
       { error: '请求太频繁，请稍后再试' },
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
     const revised = await reviseDish(dish, notes);
     return NextResponse.json({ dish: revised });
   } catch (e) {
-    const message = e instanceof Error ? e.message : '修订菜谱失败';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: clientErrorMessage(e, '修订菜谱失败') },
+      { status: 500 }
+    );
   }
 }

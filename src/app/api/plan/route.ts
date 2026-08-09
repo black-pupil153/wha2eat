@@ -3,6 +3,9 @@ import { generateWeekPlan } from '@/lib/llm';
 import { pickCatalogDishes } from '@/lib/catalog';
 import { getSolarWindow } from '@/lib/solar';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getClientIp } from '@/lib/client-ip';
+import { clientErrorMessage } from '@/lib/api-error';
+import { isValidPreferenceRanges } from '@/lib/validate-preferences';
 import type {
   Preferences,
   FridgeItem,
@@ -51,8 +54,7 @@ function isValidReviewDish(r: unknown): r is ReviewDishInput {
 }
 
 export async function POST(request: Request) {
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const ip = getClientIp(request);
   if (!checkRateLimit(ip)) {
     return NextResponse.json(
       { error: '请求太频繁，请稍后再试' },
@@ -75,10 +77,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (
-      typeof preferences.servings !== 'number' ||
-      typeof preferences.cookDaysPerWeek !== 'number'
-    ) {
+    if (!isValidPreferenceRanges(preferences)) {
       return NextResponse.json(
         { error: 'preferences 字段不合法' },
         { status: 400 }
@@ -203,7 +202,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ weekPlan, weekendFlags });
   } catch (e) {
-    const message = e instanceof Error ? e.message : '生成菜单失败';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: clientErrorMessage(e, '生成菜单失败') },
+      { status: 500 }
+    );
   }
 }

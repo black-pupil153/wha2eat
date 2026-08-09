@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { generateSingleDish } from '@/lib/llm';
 import { pickCatalogDishes } from '@/lib/catalog';
 import { getSolarWindow } from '@/lib/solar';
+import { checkRateLimit } from '@/lib/ratelimit';
+import { getClientIp } from '@/lib/client-ip';
+import { clientErrorMessage, isAiModeAllowed } from '@/lib/api-error';
+import { isValidPreferenceRanges } from '@/lib/validate-preferences';
 import type { Preferences, FridgeItem } from '@/lib/types';
 
 function localToday(): string {
@@ -10,18 +14,40 @@ function localToday(): string {
 }
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: '请求太频繁，请稍后再试' },
+      { status: 429 }
+    );
+  }
+
   try {
     const body = await request.json();
     const preferences = body?.preferences as Preferences | undefined;
     const fridge = (body?.fridge as FridgeItem[] | undefined) ?? [];
-    const excludeDishNames = (body?.excludeDishNames as string[] | undefined) ?? [];
-    // mode: 'quick' 底库秒出（默认）；'ai' 强制 DeepSeek 定制
+    const excludeDishNames =
+      (body?.excludeDishNames as string[] | undefined) ?? [];
+    // mode: 'quick' 底库秒出（默认）；'ai' 强制 DeepSeek 定制（需令牌）
     const mode = body?.mode === 'ai' ? 'ai' : 'quick';
 
     if (!preferences) {
       return NextResponse.json(
         { error: '缺少 preferences 参数' },
         { status: 400 }
+      );
+    }
+    if (!isValidPreferenceRanges(preferences)) {
+      return NextResponse.json(
+        { error: 'preferences 字段不合法' },
+        { status: 400 }
+      );
+    }
+
+    if (mode === 'ai' && !isAiModeAllowed(request.headers)) {
+      return NextResponse.json(
+        { error: '无权使用 AI 定制' },
+        { status: 403 }
       );
     }
 
@@ -40,10 +66,16 @@ export async function POST(request: Request) {
       // 底库无候选（重忌口等）→ 落到 LLM
     }
 
-    const dish = await generateSingleDish(preferences, fridge, excludeDishNames);
+    const dish = await generateSingleDish(
+      preferences,
+      fridge,
+      excludeDishNames
+    );
     return NextResponse.json({ dish: { ...dish, source: 'ai' } });
   } catch (e) {
-    const message = e instanceof Error ? e.message : '生成菜品失败';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: clientErrorMessage(e, '生成菜品失败') },
+      { status: 500 }
+    );
   }
 }
