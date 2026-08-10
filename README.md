@@ -12,6 +12,15 @@
   <img src="https://img.shields.io/badge/DeepSeek-deepseek--chat-0066FF" alt="DeepSeek" />
 </p>
 
+## 演示视频（60 秒）
+
+[![60 秒演示视频](docs/images/demo.gif)](https://github.com/black-pupil153/wha2eat/releases/tag/v1.0.0)
+
+<video src="https://github.com/black-pupil153/wha2eat/releases/download/v1.0.0/demo.mp4" controls muted playsinline width="320"></video>
+
+- 完整视频（可下载）：[GitHub Release](https://github.com/black-pupil153/wha2eat/releases/tag/v1.0.0) · [飞书云盘](https://my.feishu.cn/file/Jos0b6vyyohAQkxoj0ScsRnOnwg)（国内秒开）
+- 视频主线：`?demo=1` 进入演示 → 今晚卡片点开 → 灶台模式带做 → 做完评分 → 按笔记修订菜谱 → 分享卡片导出
+
 ## 线上体验
 
 **[http://43.143.48.9:3000](http://43.143.48.9:3000)** — 腾讯云轻量，国内直连
@@ -43,12 +52,6 @@
 | ![一周课程表](docs/images/plan.jpg) | **节气应季** — 廿四节气推今晚该吃的菜，库内占槽节气优先于复习到期；**掌握度回溯** — 做过的菜按掌握度自动排期到期再练 |
 | ![修订后菜谱](docs/images/revise.jpg) | **采购清单** — 菜单食材减冰箱库存得待购项，同类合并、勾选状态保留，「建议多买」囤货标签；一键入库联动 |
 | ![分享卡片](docs/images/share.jpg) | **分享卡片** — 导出 3:4 竖版 PNG（新课 / 复习 / 应季 + 掌握度），可直接发小红书 |
-
-## 演示视频
-
-60 秒演示视频随决赛材料提交（本地 `final5.mp4`，未入库本仓库）。
-
-**视频主线**：`?demo=1` 进入演示 → 今晚卡片点开 → 灶台模式带做 → 做完评分 → 按笔记修订菜谱 → 分享卡片导出。
 
 ## 技术栈
 
