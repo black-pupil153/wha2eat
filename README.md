@@ -14,10 +14,9 @@
 
 ## 演示视频（60 秒）
 
-[![60 秒演示视频](docs/images/demo.gif)](https://github.com/black-pupil153/wha2eat/releases/tag/v1.0.0)
+[演示视频](docs/images/demo.gif)](https://github.com/black-pupil153/wha2eat/releases/tag/v1.0.0)
 
-- 完整视频（可下载）：[GitHub Release](https://github.com/black-pupil153/wha2eat/releases/tag/v1.0.0) · [飞书云盘](https://my.feishu.cn/file/Jos0b6vyyohAQkxoj0ScsRnOnwg)（国内秒开）
-- 视频主线：`?demo=1` 进入演示 → 今晚卡片点开 → 灶台模式带做 → 做完评分 → 按笔记修订菜谱 → 分享卡片导出
+- 完整演示视频（可下载）：[GitHub Release](https://github.com/black-pupil153/wha2eat/releases/tag/v1.0.0) · [飞书云盘](https://my.feishu.cn/file/Jos0b6vyyohAQkxoj0ScsRnOnwg)
 
 ## 线上体验
 
